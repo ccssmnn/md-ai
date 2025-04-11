@@ -4,9 +4,11 @@ import { stdin as input, stdout as output } from "node:process";
 import { shouldNeverHappen } from "./utils.js";
 
 /**
- * @param {string} message
+ * Prompt the user with a message and get their response
+ * @param {string} message The message to display to the user
+ * @returns {Promise<string>} The user's response
  */
-export async function askUser(message) {
+export async function askUser(message: string): Promise<string> {
   return new Promise((resolve) => {
     let rl = createInterface({ input, output });
 
@@ -29,7 +31,11 @@ export async function askUser(message) {
  * @param {Array<string>} args to provide the editor (e.g. --wait for vscode or +99999 for vim)
  * @returns {Promise<void>}
  */
-export async function openInEditor(editor, path, ...args) {
+export async function openInEditor(
+  editor: string,
+  path: string,
+  ...args: string[]
+): Promise<void> {
   return new Promise((resolve, reject) => {
     let [cmd, ...editorArgs] = editor.split(" ");
     if (!cmd) {

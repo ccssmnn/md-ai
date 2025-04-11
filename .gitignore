@@ -1,5 +1,8 @@
-node_modules
+node_modules/
+lib/
+
 .env
 .env.local
+
 system.md
 chat.md

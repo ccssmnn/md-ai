@@ -1,20 +1,19 @@
+import type { CoreMessage } from "ai";
 import { shouldNeverHappen } from "./utils.js";
 
 /**
+ * Converts a markdown string to an array of chat messages
  * @param {string} markdown file as a string
- * @returns {Array<import("ai").CoreMessage>}
+ * @returns {Array<CoreMessage>}
  */
-export function markdownToMessages(markdown) {
+export function markdownToMessages(markdown: string): CoreMessage[] {
   let lines = markdown.split("\n");
 
-  /** @type {Array<import("ai").CoreMessage>} */
-  let messages = [];
+  let messages: CoreMessage[] = [];
 
-  /** @type {import("ai").CoreMessage["role"] | null} */
-  let messageRole = null;
+  let messageRole: CoreMessage["role"] | null = null;
 
-  /** @type {Array<string>} */
-  let messageLines = [];
+  let messageLines: string[] = [];
 
   for (let line of lines) {
     let trimmed = line.trim().toLowerCase();
@@ -50,10 +49,11 @@ export function markdownToMessages(markdown) {
 }
 
 /**
- * @param {import("ai").CoreMessage[]} messages
+ * Converts an array of chat messages to a markdown string
+ * @param {CoreMessage[]} messages
  * @returns {string}
  */
-export function messagesToMarkdown(messages) {
+export function messagesToMarkdown(messages: CoreMessage[]): string {
   let markdown = "";
 
   for (let message of messages) {

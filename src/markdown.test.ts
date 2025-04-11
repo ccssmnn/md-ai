@@ -2,10 +2,6 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { markdownToMessages } from "./markdown.js";
 
-/**
- * @typedef {import("ai").CoreMessage} CoreMessage
- */
-
 test("extracts a single user message", () => {
   const markdown = `## user
 Hello there.`;
@@ -61,7 +57,7 @@ Line B`;
 });
 
 test("is case-insensitive and trims headings", () => {
-  const markdown = `## USER  \n 
+  const markdown = `## USER  \n
 How are you?
 
 ## Assistant   \n

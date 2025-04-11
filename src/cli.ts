@@ -5,9 +5,9 @@ import { argv, env } from "node:process";
 
 import { google } from "@ai-sdk/google";
 
-import { MarkdownChat } from "./machine.js";
+import { MarkdownChat } from "./chat.js";
 
-function printUsage() {
+function printUsage(): void {
   console.log(`
 Usage: ./cli.js <chat_file_path> [--system=<system_prompt_path>] [-d]
 
@@ -17,8 +17,8 @@ Usage: ./cli.js <chat_file_path> [--system=<system_prompt_path>] [-d]
 `);
 }
 
-let chatPath;
-let systemPrompt;
+let chatPath: string | undefined;
+let systemPrompt: string | undefined;
 
 for (let i = 2; i < argv.length; i++) {
   let arg = argv[i];

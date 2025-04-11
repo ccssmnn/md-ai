@@ -5,7 +5,7 @@ import { env } from "node:process";
  * @param {any[]} args
  * @returns {never}
  */
-export function shouldNeverHappen(msg, ...args) {
+export function shouldNeverHappen(msg: string, ...args: any[]): never {
   console.error(msg, ...args);
   if (isDevEnv()) {
     debugger;
@@ -13,6 +13,6 @@ export function shouldNeverHappen(msg, ...args) {
   throw new Error(`This should never happen: ${msg}`);
 }
 
-export function isDevEnv() {
+export function isDevEnv(): boolean {
   return env.IS_DEV === "true";
 }
