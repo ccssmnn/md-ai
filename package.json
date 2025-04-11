@@ -1,0 +1,28 @@
+{
+  "name": "markdown-chat",
+  "version": "0.0.1",
+  "author": "Carl Assmann",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "check": "tsc",
+    "test": "node --test"
+  },
+  "bin": {
+    "markdown-chat": "./src/cli.js"
+  },
+  "dependencies": {
+    "@ai-sdk/google": "^1.2.10",
+    "ai": "^4.3.4",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@types/node": "22",
+    "prettier": "^3.5.3",
+    "typescript": "^5.8.3"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "packageManager": "pnpm@10.7.0"
+}
