@@ -5,20 +5,25 @@ import { argv, env } from "node:process";
 
 import { google } from "@ai-sdk/google";
 
-import { MarkdownChat } from "./chat.js";
+import { MarkdownAI, type MarkdownAIOptions } from "./chat.js";
+import { createReadFileTool } from "./tools.js";
+import { isGeneratorFunction } from "node:util/types";
 
 function printUsage(): void {
   console.log(`
 Usage: ./cli.js <chat_file_path> [--system=<system_prompt_path>] [-d]
 
   <chat_file_path>       Path to the markdown file for the chat history.
+  --max-steps=<number>   Optional number of max steps for tool calling
   --system=<path>        Optional path to a file containing the system prompt.
   -d                     Optional flag to set development mode.
 `);
 }
 
-let chatPath: string | undefined;
-let systemPrompt: string | undefined;
+let editor = "vi +99999";
+let path: string | undefined;
+let system: string | undefined;
+let maxSteps = 1;
 
 for (let i = 2; i < argv.length; i++) {
   let arg = argv[i];
@@ -34,13 +39,20 @@ for (let i = 2; i < argv.length; i++) {
       process.exit(1);
     }
     try {
-      systemPrompt = readFileSync(path, { encoding: "utf-8" });
+      system = readFileSync(path, { encoding: "utf-8" });
     } catch (error) {
       console.error(`Error: Could not read system prompt file: ${path}`);
       process.exit(1);
     }
-  } else if (!chatPath) {
-    chatPath = arg;
+  } else if (arg.startsWith("--max-steps=")) {
+    let [, n] = arg.split("=", 2);
+    if (!n || Number(n) < 1) {
+      console.error("Error: --max-steps requires a number >0");
+      process.exit(1);
+    }
+    maxSteps = Number(n);
+  } else if (!path) {
+    path = arg;
   } else {
     console.error(`Error: Unexpected argument: ${arg}`);
     printUsage();
@@ -48,29 +60,40 @@ for (let i = 2; i < argv.length; i++) {
   }
 }
 
-if (!chatPath) {
+if (process.env.EDITOR) {
+  editor = process.env.EDITOR;
+}
+
+if (!path) {
   console.error("Error: Missing chat file path");
   printUsage();
   process.exit(1);
 }
 
-if (!existsSync(chatPath)) {
+if (!existsSync(path)) {
   try {
-    await writeFile(chatPath, "", { encoding: "utf-8" });
+    await writeFile(path, "", { encoding: "utf-8" });
   } catch (error) {
-    console.error(`Error: Could not create chat file: ${chatPath}`);
+    console.error(`Error: Could not create chat file: ${path}`);
     process.exit(1);
   }
 }
 
-let chatOptions = {
-  model: google("gemini-2.0-flash"),
-  path: chatPath,
-  systemPrompt,
+let options: MarkdownAIOptions = {
+  path,
+  editor,
+  ai: {
+    model: google("gemini-2.0-flash"),
+    system,
+    maxSteps,
+    tools: {
+      readFile: createReadFileTool({ shouldAsk: true }),
+    },
+  },
 };
 
-let chatMachine = new MarkdownChat(chatOptions);
+let chat = new MarkdownAI(options);
 
-await chatMachine.run();
+await chat.run();
 
 process.exit(0);

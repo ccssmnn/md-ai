@@ -5,8 +5,6 @@ import { shouldNeverHappen } from "./utils.js";
 
 /**
  * Prompt the user with a message and get their response
- * @param {string} message The message to display to the user
- * @returns {Promise<string>} The user's response
  */
 export async function askUser(message: string): Promise<string> {
   return new Promise((resolve) => {
@@ -26,10 +24,9 @@ export async function askUser(message: string): Promise<string> {
 
 /**
  * This function opens the file at path with the cmd provided and returns after the opened editor was quit
- * @param {string} editor the command to open the editor
- * @param {string} path to the file to open
+ * @param editor the command to open the editor
+ * @param path to the file to open
  * @param {Array<string>} args to provide the editor (e.g. --wait for vscode or +99999 for vim)
- * @returns {Promise<void>}
  */
 export async function openInEditor(
   editor: string,

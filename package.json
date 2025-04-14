@@ -1,28 +1,55 @@
 {
   "name": "md-ai",
   "version": "0.0.1",
-  "author": "Carl Assmann",
+  "author": "Carl Assmann <assmann@hey.com> (https://carlassmann.com)",
+  "description": "AI conversations in markdown with your preferred editor",
+  "url": "https://github.com/ccssmnn/md-ai",
+  "bugs": {
+    "url": "https://github.com/ccssmnn/md-ai/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ccssmnn/md-ai.git"
+  },
+  "keywords": [
+    "ai",
+    "llm",
+    "chatgpt",
+    "markdown",
+    "typescript",
+    "cli"
+  ],
+  "files": [
+    "lib",
+    "README.md",
+    "LICENSE"
+  ],
   "license": "MIT",
   "type": "module",
   "scripts": {
-    "check": "tsc --noEmit",
     "build": "tsc",
-    "prepublishOnly": "pnpm build",
-    "clean": "rm -rf lib",
-    "test": "node --test lib/"
+    "test": "tsx --test src",
+    "format": "prettier --write .",
+    "check-types": "tsc --noEmit",
+    "check-exports": "attw --pack . --ignore-rules=cjs-resolves-to-esm",
+    "check-format": "prettier --check .",
+    "ci": "pnpm build && pnpm check-format && pnpm check-exports && pnpm test"
   },
   "bin": {
     "md-ai": "./lib/cli.js"
   },
   "main": "./lib/index.js",
+  "types": "./lib/index.d.ts",
   "dependencies": {
-    "@ai-sdk/google": "^1.2.10",
-    "ai": "^4.3.4",
+    "@ai-sdk/google": "^1.2.11",
+    "ai": "^4.3.6",
     "zod": "^3.24.2"
   },
   "devDependencies": {
-    "@types/node": "22",
+    "@arethetypeswrong/cli": "^0.17.4",
+    "@types/node": "^22.14.1",
     "prettier": "^3.5.3",
+    "tsx": "^4.19.3",
     "typescript": "^5.8.3"
   },
   "engines": {

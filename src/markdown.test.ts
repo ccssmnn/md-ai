@@ -1,71 +1,239 @@
 import { test } from "node:test";
-import assert from "node:assert/strict";
-import { markdownToMessages } from "./markdown.js";
+import { strict as assert } from "node:assert";
+import { markdownToMessages, messagesToMarkdown } from "./markdown.js"; // Adjust if your file name is different
+import type { CoreMessage } from "ai";
 
-test("extracts a single user message", () => {
-  const markdown = `## user
-Hello there.`;
+test("markdownToMessages: minimal example", () => {
+  let markdown = `
+## user
 
-  const result = markdownToMessages(markdown);
-  assert.deepEqual(result, [{ role: "user", content: "Hello there." }]);
-});
-
-test("extracts a user and assistant message", () => {
-  const markdown = `## user
-Hello.
+Hello World!
 
 ## assistant
-Hi! How can I help?`;
 
-  const result = markdownToMessages(markdown);
-  assert.deepEqual(result, [
-    { role: "user", content: "Hello." },
-    { role: "assistant", content: "Hi! How can I help?" },
-  ]);
+Hello User!
+`;
+  let messages = markdownToMessages(markdown);
+
+  let expectedResult: typeof messages = [
+    { role: "user", content: "Hello World!" },
+    { role: "assistant", content: "Hello User!" },
+  ];
+
+  assert.deepEqual(messages, expectedResult);
 });
 
-test("ignores trailing heading with no content", () => {
-  const markdown = `## user
-Hi there.
+test("markdownToMessages: empty user message", () => {
+  let markdown = `
+## user
+
+`;
+  let messages = markdownToMessages(markdown);
+  let expectedResult: CoreMessage[] = [{ role: "user", content: "" }];
+  assert.deepEqual(messages, expectedResult);
+});
+
+test("markdownToMessages: with file", () => {
+  let markdown = `
+## user
+
+Check this file [file](path/to/file.txt)
 
 ## assistant
-Hello.
 
-## user`;
+thanks!
+`;
+  let messages = markdownToMessages(markdown);
 
-  const result = markdownToMessages(markdown);
-  assert.deepEqual(result, [
-    { role: "user", content: "Hi there." },
-    { role: "assistant", content: "Hello." },
-  ]);
+  let expectedResult: typeof messages = [
+    {
+      role: "user",
+      content: [
+        { type: "text", text: "Check this file " },
+        { type: "file", data: "path/to/file.txt", mimeType: "" },
+      ],
+    },
+    { role: "assistant", content: "thanks!" },
+  ];
+  assert.deepEqual(messages, expectedResult);
 });
 
-test("handles multiple lines per message", () => {
-  const markdown = `## user
-Line one
-Line two
+test("markdownToMessages: with tool call and response", () => {
+  let markdown = `
+## user
+
+call the tool for me
 
 ## assistant
-Line A
-Line B`;
 
-  const result = markdownToMessages(markdown);
-  assert.deepEqual(result, [
-    { role: "user", content: "Line one\nLine two" },
-    { role: "assistant", content: "Line A\nLine B" },
-  ]);
+will do!
+
+\`\`\`tool-call
+{
+  "toolCallId": "1234",
+  "toolName": "myTool",
+  "args": {
+    "msg": "hello tool"
+  }
+}
+\`\`\`
+
+## tool
+
+
+\`\`\`tool-result
+{
+  "toolCallId": "1234",
+  "toolName": "myTool",
+  "result": {
+    "response": "hello agent"
+  }
+}
+\`\`\`
+`;
+  let messages = markdownToMessages(markdown);
+
+  let expectedResult: typeof messages = [
+    {
+      role: "user",
+      content: "call the tool for me",
+    },
+    {
+      role: "assistant",
+      content: [
+        { type: "text", text: "will do!\n" },
+        {
+          type: "tool-call",
+          toolCallId: "1234",
+          toolName: "myTool",
+          args: { msg: "hello tool" },
+        },
+      ],
+    },
+
+    {
+      role: "tool",
+      content: [
+        {
+          type: "tool-result",
+          toolCallId: "1234",
+          toolName: "myTool",
+          result: { response: "hello agent" },
+        },
+      ],
+    },
+  ];
+  assert.deepEqual(messages, expectedResult);
 });
 
-test("is case-insensitive and trims headings", () => {
-  const markdown = `## USER  \n
-How are you?
+test("messagesToMarkdown: minimal example", () => {
+  let messages: CoreMessage[] = [
+    { role: "user", content: "Hello World!" },
+    { role: "assistant", content: "Hello User!" },
+  ];
 
-## Assistant   \n
-I'm fine.`;
+  let markdown = messagesToMarkdown(messages);
 
-  const result = markdownToMessages(markdown);
-  assert.deepEqual(result, [
-    { role: "user", content: "How are you?" },
-    { role: "assistant", content: "I'm fine." },
-  ]);
+  let expectedMarkdown = `## user
+
+Hello World!
+
+## assistant
+
+Hello User!
+`;
+  assert.equal(markdown, expectedMarkdown);
+});
+
+test("messagesToMarkdown: with file", () => {
+  let messages: CoreMessage[] = [
+    {
+      role: "user",
+      content: [
+        { type: "text", text: "Check this file " },
+        { type: "file", data: "path/to/file.txt", mimeType: "" },
+      ],
+    },
+    { role: "assistant", content: "thanks!" },
+  ];
+
+  let markdown = messagesToMarkdown(messages);
+
+  let expectedMarkdown = `## user
+
+Check this file [file](path/to/file.txt)
+
+## assistant
+
+thanks!
+`;
+
+  assert.equal(markdown, expectedMarkdown);
+});
+
+test("messagesToMarkdown: with tool call and response", () => {
+  let messages: CoreMessage[] = [
+    {
+      role: "user",
+      content: "call the tool for me",
+    },
+    {
+      role: "assistant",
+      content: [
+        { type: "text", text: "will do!\n" },
+        {
+          type: "tool-call",
+          toolCallId: "1234",
+          toolName: "myTool",
+          args: { msg: "hello tool" },
+        },
+      ],
+    },
+
+    {
+      role: "tool",
+      content: [
+        {
+          type: "tool-result",
+          toolCallId: "1234",
+          toolName: "myTool",
+          result: { response: "hello agent" },
+        },
+      ],
+    },
+  ];
+
+  let markdown = messagesToMarkdown(messages);
+
+  let expectedMarkdown = `## user
+
+call the tool for me
+
+## assistant
+
+will do!
+
+\`\`\`tool-call
+{
+  "toolCallId": "1234",
+  "toolName": "myTool",
+  "args": {
+    "msg": "hello tool"
+  }
+}
+\`\`\`
+
+## tool
+
+\`\`\`tool-result
+{
+  "toolCallId": "1234",
+  "toolName": "myTool",
+  "result": {
+    "response": "hello agent"
+  }
+}
+\`\`\`
+`;
+  assert.equal(markdown, expectedMarkdown);
 });

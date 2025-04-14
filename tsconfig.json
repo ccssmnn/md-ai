@@ -1,22 +1,21 @@
 {
+  "$schema": "https://json.schemastore.org/tsconfig.json",
   "compilerOptions": {
+    "esModuleInterop": true,
+    "skipLibCheck": true,
     "target": "es2022",
-    "module": "node16",
-    "moduleResolution": "node16",
-    "outDir": "./lib",
-    "declaration": true,
+    "allowJs": true,
+    "resolveJsonModule": true,
+    "moduleDetection": "force",
+    "isolatedModules": true,
+    "verbatimModuleSyntax": true,
     "strict": true,
     "noUncheckedIndexedAccess": true,
     "noImplicitOverride": true,
-    "esModuleInterop": true,
-    "skipLibCheck": true,
-    "allowJs": true,
-    "checkJs": true,
-    "resolveJsonModule": true,
-    "isolatedModules": true,
-    "verbatimModuleSyntax": true,
-    "moduleDetection": "force",
-    "lib": ["es2022"]
-  },
-  "include": ["src"]
+    "module": "NodeNext",
+    "sourceMap": true,
+    "declaration": true,
+    "lib": ["es2022"],
+    "outDir": "lib"
+  }
 }

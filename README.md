@@ -1,33 +1,101 @@
+‼️ This is still work in progress
+
+TODO:
+
+- Use `tree-sitter` for parsing the markdown file. Manual parsing is not stable, especially with "special characters" in code fences.
+- Add more tools for reading files and directories
+- Allow picking a model via CLI flag
+- Enable / Disable tools via flags
+- Tools for writing files and executing commands.
+
 # Markdown AI
 
 A command-line tool and library for working with AI using markdown in your own `$EDITOR`.
 
-## How does this work?
-
-The chat is stored as markdown on the file system.
-The markdown file follows these conventions:
-
-- `## User` and `## Assistant` (not case sensitive) headings split the markdown file into the respective messages
-- a file ending with a non empty user message will ask to call the LLM
-- otherwise the user is asked to edit the file
-
-You are free to edit or delete the models responses or your own messages.
-I tend to have the same process and just wipe the file unless I want to keep it.
-
-## Goals
-
-- always markdown
-- support custom editors
-- support custom models
-- tool calling
-
 ## Features
 
-- Uses markdown for chat history.
-- Opens your editor for editing the chat.
-- Supports system prompts.
+- CLI or Library - Library allows you to provide a custom model and custom tools.
+- The entire Chat is Markdown, including tool calls.
+- Opens your `$EDITOR` for editing the chat - you can edit everything with your preferred editor.
+- Tool calling.
+- Custom system prompt.
 - Streams responses from AI models to the console while they are generated.
-- Use as CLI or library
+
+## How does this work?
+
+At the core the chat is serialized into markdown after each AI invocation.
+You can read and edit the markdown and it will be parsed into messages before sent to the AI.
+
+Example:
+
+```
+## User
+
+call the tool for me
+
+## Assistant
+
+will do!
+
+\`\`\`tool-call
+{
+  "toolCallId": "1234",
+  "toolName": "myTool",
+  "args": {
+    "msg": "hello tool"
+  }
+}
+\`\`\`
+
+## Tool
+
+
+\`\`\`tool-result
+{
+  "toolCallId": "1234",
+  "toolName": "myTool",
+  "result": {
+    "response": "hello agent"
+  }
+}
+\`\`\`
+```
+
+Will be parsed into
+
+```typescript
+import type { CoreMessage } from "ai";
+
+let messages: Array<CoreMessage> = [
+  {
+    role: "user",
+    content: "call the tool for me",
+  },
+  {
+    role: "assistant",
+    content: [
+      { type: "text", text: "will do!\n" },
+      {
+        type: "tool-call",
+        toolCallId: "1234",
+        toolName: "myTool",
+        args: { msg: "hello tool" },
+      },
+    ],
+  },
+  {
+    role: "tool",
+    content: [
+      {
+        type: "tool-result",
+        toolCallId: "1234",
+        toolName: "myTool",
+        result: { response: "hello agent" },
+      },
+    ],
+  },
+];
+```
 
 ## Command-line Usage
 
@@ -36,25 +104,30 @@ export GOOGLE_GENERATIVE_AI_API_KEY=blablabla # uses gemini 2.0 flash
 export EDITOR="hx +99999" # defaults to vi
 # or
 export EDITOR="code --wait"
-md-chat chat.md --system=system.md
+
+node lib/cli.js chat.md --system=system.md
 ```
 
 ## Library Usage
 
-The package can also be used as a library in your own scripts:
+The package can also be used as a library in your own script.
+By using `MarkdownAI` this way, you can provide your own tools and model:
 
 ```javascript
-import { MarkdownChat } from "markdown-chat";
+import { MarkdownAI, tools } from "md-ai";
 
-const chat = new MarkdownChat({
-  // provide your own model
-  model: google("gemini-2.0-flash"),
+const chat = new MarkdownAI({
   path: "./my-chat.md",
-  systemPrompt: "You are a helpful assistant.",
-  // set the editor
   editor: "code --wait",
-  tools: {
-    // provide tools that the llm can access
+  ai: {
+    // these are forwarded to the "ai" `steamText` call
+    model: google("gemini-2.0-flash"),
+    system: "You are a helpful assistant.",
+    maxSteps: 5,
+    tools: {
+      readFile: tools.createReadFileTool({ shouldAsk: true }),
+      // your custom tools
+    },
   },
 });
 
@@ -63,11 +136,13 @@ await chat.run();
 
 ## Why does this exist?
 
+My opinions:
+
 - LLM Chat Editing experience is bad
-- Editing experience in my editor is good
+- Editing experience in _my editor_ is good
 - LLMs respond in markdown anyway
-- Markdown has syntax highlighting
-- Lives on my machine, uses my API keys
+- Markdown in editors comes with syntax highlighting for free
+- Lives on my machine, uses my API keys, can use my tools
 
 ## License
 
