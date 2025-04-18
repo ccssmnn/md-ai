@@ -4,19 +4,29 @@ import { stdin as input, stdout as output } from "node:process";
 import { shouldNeverHappen } from "./utils.js";
 
 /**
- * Prompt the user with a message and get their response
+ * Prompt the user with a message and get their response as a string.
  */
 export async function askUser(message: string): Promise<string> {
   return new Promise((resolve) => {
-    let rl = createInterface({ input, output });
+    output.write(message);
 
-    rl.question(message, (answer) => {
-      rl.close();
+    if (input.isTTY) {
+      input.setRawMode(true);
+    }
+
+    input.resume();
+    input.once("data", (buffer) => {
+      let answer = buffer.toString().trim();
+      input.pause();
+
+      if (input.isTTY) {
+        input.setRawMode(false);
+      }
+      output.write("\n");
       resolve(answer);
     });
 
-    rl.on("SIGINT", () => {
-      rl.close();
+    input.on("SIGINT", () => {
       process.exit(0);
     });
   });

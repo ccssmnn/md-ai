@@ -4,9 +4,10 @@ import { stdout } from "node:process";
 import { streamText } from "ai";
 import type { CoreMessage } from "ai";
 
-import { markdownToMessages, messagesToMarkdown } from "./markdown.js";
 import { askUser, openInEditor } from "./prompts.js";
 import { logger } from "./utils.js";
+import { markdownToMessages } from "./markdown-parse.js";
+import { messagesToMarkdown } from "./markdown-serialize.js";
 
 type AISDKArgs = Omit<Parameters<typeof streamText>[0], "messages" | "prompt">;
 
@@ -57,11 +58,9 @@ export class MarkdownAI {
    */
   private async userturn(addHeading = false): Promise<boolean> {
     if (addHeading) {
-      await appendFile(this.chatPath, "\n## User\n");
+      await appendFile(this.chatPath, "\n## user\n");
     }
-    let answer = await askUser(
-      "🤓: open editor to enter user message?\n(y/n): ",
-    );
+    let answer = await askUser("🤓: open editor to enter user message? (y/n)");
     if (answer.toLowerCase() !== "y") {
       return false;
     }
@@ -75,7 +74,7 @@ export class MarkdownAI {
    * @returns A promise that resolves to true if the model generated a response, false otherwise.
    */
   private async aiturn(messages: CoreMessage[]): Promise<boolean> {
-    let answer = await askUser("🤓: invoke the LLM?\n(y/n): ");
+    let answer = await askUser("🤓: invoke the LLM? (y/n)");
     if (answer.toLowerCase() !== "y") {
       return false;
     }
@@ -134,7 +133,7 @@ type NextTurn = { role: "user"; addHeading: boolean } | { role: "assistant" };
  */
 function determineNextTurn(chat: CoreMessage[]): NextTurn {
   let lastMessage = chat.at(-1);
-  if (!lastMessage || lastMessage.role !== "user") {
+  if (!lastMessage || lastMessage.role === "assistant") {
     return {
       role: "user",
       addHeading: true,

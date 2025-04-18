@@ -2,7 +2,6 @@
 
 TODO:
 
-- Use `tree-sitter` for parsing the markdown file. Manual parsing is not stable, especially with "special characters" in code fences.
 - Add more tools for reading files and directories
 - Allow picking a model via CLI flag
 - Enable / Disable tools via flags
