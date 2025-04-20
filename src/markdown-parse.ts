@@ -1,131 +1,103 @@
 import { unified } from "unified";
 import remarkParse from "remark-parse";
-import type { Heading } from "mdast";
+import type { Root, Paragraph, PhrasingContent } from "mdast";
 import { z } from "zod";
-import type { CoreMessage } from "ai";
+import type { CoreMessage, TextPart, ToolCallPart, ToolResultPart } from "ai";
 
-const VALID_ROLES = ["user", "assistant", "tool"] as const;
+/**
+ * transforms a markdown string into a list of CoreMessage that can be passed into the ai sdk
+ * @throws if a tool-call or tool-result code fence does not match the schema or would be assigned to an invalid message role
+ */
+export function markdownToMessages(markdown: string): CoreMessage[] {
+  let tree = unified().use(remarkParse).parse(markdown) as Root;
+  let sections: Array<{ role: Role; parts: ContentPart[] }> = [];
+  let current: { role: Role; parts: ContentPart[] } | null = null;
 
-type Role = (typeof VALID_ROLES)[number];
+  tree.children.forEach((node) => {
+    if (node.type === "heading" && node.depth === 2) {
+      let role = checkRoleHeading(node.children[0]);
+      if (role) {
+        current = { role, parts: [] };
+        sections.push(current);
+        return;
+      }
+    }
 
-const ToolCallSchema = z.object({
+    if (!current) return;
+
+    if (node.type === "code") {
+      let start = node.position?.start.offset;
+      let end = node.position?.end.offset;
+      let raw = start != null && end != null ? markdown.slice(start, end) : "";
+      if (node.lang === "tool-call") {
+        if (current.role !== "assistant") {
+          throw new Error("Tool calls are only allowed in assistant messages");
+        }
+        let data = toolCallSchema.parse(JSON.parse(node.value));
+        current.parts.push({ type: "tool-call", ...data });
+      } else if (node.lang === "tool-result") {
+        if (current.role !== "tool") {
+          throw new Error("Tool results are only allowed in tool messages");
+        }
+        let data = toolResultSchema.parse(JSON.parse(node.value));
+        current.parts.push({ type: "tool-result", ...data });
+      } else {
+        current.parts.push({ type: "text", text: raw });
+      }
+      return;
+    }
+
+    if (node.type === "paragraph") {
+      let para = node as Paragraph;
+      let txt = para.children
+        .map((c) => {
+          if (!("value" in c)) return "";
+          return c.value;
+        })
+        .join("");
+      current.parts.push({ type: "text", text: txt + "\n" });
+      return;
+    }
+
+    let start = node.position?.start.offset;
+    let end = node.position?.end.offset;
+    let raw = start != null && end != null ? markdown.slice(start, end) : "";
+    current.parts.push({ type: "text", text: raw });
+  });
+
+  return sections.map(({ role, parts }) => {
+    let content: string | ContentPart[];
+    if (parts.length === 0) {
+      content = "";
+    } else if (parts.length === 1 && parts[0] && parts[0].type === "text") {
+      content = parts[0].text.replace(/\n$/, "");
+    } else {
+      content = parts;
+    }
+    return { role, content } as CoreMessage;
+  });
+}
+
+let toolCallSchema = z.object({
   toolCallId: z.string(),
   toolName: z.string(),
   args: z.record(z.any()),
 });
 
-const ToolResultSchema = z.object({
+let toolResultSchema = z.object({
   toolCallId: z.string(),
   toolName: z.string(),
   result: z.record(z.any()),
 });
 
-type TextPart = { type: "text"; text: string };
-type ToolCallPart = { type: "tool-call" } & z.infer<typeof ToolCallSchema>;
-type ToolResultPart = { type: "tool-result" } & z.infer<
-  typeof ToolResultSchema
->;
 type ContentPart = TextPart | ToolCallPart | ToolResultPart;
-type MessageContent = string | ContentPart[];
 
-function isRoleHeading(node: Heading): node is Heading {
-  const first = node.children[0];
-  if (!first || first.type !== "text") return false;
-  return VALID_ROLES.includes(first.value.trim().toLowerCase() as Role);
-}
-
-export function markdownToMessages(markdown: string): CoreMessage[] {
-  const tree = unified().use(remarkParse).parse(markdown);
-  const messages: CoreMessage[] = [];
-  const nodes = tree.children;
-  let i = 0;
-
-  while (i < nodes.length) {
-    const node = nodes[i]!;
-    if (node.type === "heading" && node.depth === 2 && isRoleHeading(node)) {
-      const heading = node;
-      const roleText = (heading.children[0] as any).value.trim().toLowerCase();
-      let role = roleText;
-      const parts: ContentPart[] = [];
-      i++;
-
-      while (i < nodes.length) {
-        const child = nodes[i]!;
-        if (
-          child.type === "heading" &&
-          child.depth === 2 &&
-          isRoleHeading(child)
-        )
-          break;
-
-        if (child.type === "heading") {
-          const start = child.position?.start.offset;
-          const end = child.position?.end.offset;
-          const raw =
-            start != null && end != null ? markdown.slice(start, end) : "";
-          parts.push({ type: "text", text: raw });
-          i++;
-          continue;
-        }
-
-        if (child.type === "code") {
-          const code = child;
-          // raw markdown of fence
-          const start = child.position?.start.offset;
-          const end = child.position?.end.offset;
-          const raw =
-            start != null && end != null ? markdown.slice(start, end) : "";
-          if (code.lang === "tool-call") {
-            if (role !== "assistant") {
-              throw new Error(
-                "Tool calls are only allowed in assistant messages",
-              );
-            }
-            const data = ToolCallSchema.parse(JSON.parse(code.value));
-            parts.push({ type: "tool-call", ...data });
-          } else if (code.lang === "tool-result") {
-            if (role !== "tool") {
-              throw new Error("Tool results are only allowed in tool messages");
-            }
-            const data = ToolResultSchema.parse(JSON.parse(code.value));
-            parts.push({ type: "tool-result", ...data });
-          } else {
-            parts.push({ type: "text", text: raw });
-          }
-        } else if (child.type === "paragraph") {
-          const para = child;
-          const text = para.children
-            .map((c) => ((c as any).value as string) ?? "")
-            .join("");
-          parts.push({ type: "text", text: text + "\n" });
-        } else {
-          const start = child.position?.start.offset;
-          const end = child.position?.end.offset;
-          const raw =
-            start != null && end != null ? markdown.slice(start, end) : "";
-          parts.push({ type: "text", text: raw });
-        }
-
-        i++;
-      }
-
-      const count = parts.length;
-      let content: MessageContent;
-      if (count === 0) {
-        content = "";
-      } else {
-        const only = parts[0]!;
-        if (count === 1 && only.type === "text") {
-          content = only.text.replace(/\n$/, "");
-        } else {
-          content = parts;
-        }
-      }
-      messages.push({ role, content } as CoreMessage);
-    } else {
-      i++;
-    }
-  }
-
-  return messages;
+let VALID_ROLES = ["user", "assistant", "tool"] as const;
+type Role = (typeof VALID_ROLES)[number];
+function checkRoleHeading(node?: PhrasingContent): Role | null {
+  if (!node) return null;
+  if (node.type !== "text") return null;
+  if (!VALID_ROLES.includes(node.value.trim().toLowerCase() as any))
+    return null;
+  return node.value.trim().toLowerCase() as Role;
 }

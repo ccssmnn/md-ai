@@ -10,35 +10,42 @@ export function messagesToMarkdown(messages: Array<CoreMessage>): string {
   for (const msg of messages) {
     md += `## ${msg.role}\n\n`;
 
-    switch (msg.role) {
-      case "system":
-        md += `${msg.content}\n\n`;
-        break;
-
-      case "user":
-        if (typeof msg.content === "string") {
-          md += `${msg.content}\n\n`;
-        } else {
-          shouldNeverHappen(
-            "file and image parts of the user message cannot be serialized yet",
-          );
-        }
-        break;
-
-      case "assistant":
-        md +=
-          typeof msg.content === "string"
-            ? msg.content
-            : serializeAssistantParts(msg.content) + "\n\n";
-        break;
-
-      case "tool":
-        md += serializeToolResultParts(msg.content) + "\n\n";
-        break;
-
-      default:
-        shouldNeverHappen(`unknown role: ${msg}`);
+    if (msg.role === "system") {
+      md += `${msg.content}\n\n`;
+      continue;
     }
+
+    if (msg.role === "user") {
+      if (typeof msg.content === "string") {
+        md += `${msg.content}\n\n`;
+      } else {
+        for (let part of msg.content) {
+          if (part.type !== "text") {
+            shouldNeverHappen(
+              `file and image parts of the user message cannot be serialized yet. got message: ${JSON.stringify(msg)}`,
+            );
+          }
+          md += `${part.text}\n\n`;
+        }
+      }
+      continue;
+    }
+
+    if (msg.role === "assistant") {
+      if (typeof msg.content === "string") {
+        md += msg.content;
+      } else {
+        md += serializeAssistantParts(msg.content) + "\n\n";
+      }
+      continue;
+    }
+
+    if (msg.role === "tool") {
+      md += serializeToolResultParts(msg.content) + "\n\n";
+      continue;
+    }
+
+    shouldNeverHappen(`unexpected message: ${msg}`);
   }
 
   return md.trimEnd() + "\n";
@@ -75,7 +82,7 @@ function serializeToolResultParts(parts: Array<ToolResultPart>): string {
       result: p.result,
     };
     const json = JSON.stringify(payload);
-    out += `${fence("tool-result", json)}`;
+    out += `\n${fence("tool-result", json)}`;
   }
   return out;
 }

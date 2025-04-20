@@ -6,8 +6,11 @@ import { argv, env } from "node:process";
 import { google } from "@ai-sdk/google";
 
 import { MarkdownAI, type MarkdownAIOptions } from "./chat.js";
-import { createReadFileTool } from "./tools.js";
-import { isGeneratorFunction } from "node:util/types";
+import {
+  createListFilesTool,
+  createReadFilesTool,
+  createWriteFilesTool,
+} from "./tools.js";
 
 function printUsage(): void {
   console.log(`
@@ -83,11 +86,13 @@ let options: MarkdownAIOptions = {
   path,
   editor,
   ai: {
-    model: google("gemini-2.0-flash"),
+    model: google("gemini-2.0-pro-exp-02-05"),
     system,
     maxSteps,
     tools: {
-      readFile: createReadFileTool({ shouldAsk: true }),
+      readFiles: createReadFilesTool(),
+      listFiles: createListFilesTool(),
+      writeFiles: createWriteFilesTool(),
     },
   },
 };

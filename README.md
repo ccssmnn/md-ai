@@ -2,10 +2,8 @@
 
 TODO:
 
-- Add more tools for reading files and directories
 - Allow picking a model via CLI flag
 - Enable / Disable tools via flags
-- Tools for writing files and executing commands.
 
 # Markdown AI
 
@@ -99,12 +97,12 @@ let messages: Array<CoreMessage> = [
 ## Command-line Usage
 
 ```bash
-export GOOGLE_GENERATIVE_AI_API_KEY=blablabla # uses gemini 2.0 flash
+export GOOGLE_GENERATIVE_AI_API_KEY=blablabla # uses gemini-2.0-pro-exp-02-05 by default
 export EDITOR="hx +99999" # defaults to vi
 # or
 export EDITOR="code --wait"
 
-node lib/cli.js chat.md --system=system.md
+node lib/cli.js chat.md --system=system.md --max-steps=5
 ```
 
 ## Library Usage
@@ -120,11 +118,13 @@ const chat = new MarkdownAI({
   editor: "code --wait",
   ai: {
     // these are forwarded to the "ai" `steamText` call
-    model: google("gemini-2.0-flash"),
+    model: google("gemini-2.0-pro-exp-02-05"), // Example model, align with CLI default
     system: "You are a helpful assistant.",
     maxSteps: 5,
     tools: {
-      readFile: tools.createReadFileTool({ shouldAsk: true }),
+      readFiles: tools.createReadFilesTool(),
+      listFiles: tools.createListFilesTool(),
+      writeFiles: tools.createWriteFilesTool(),
       // your custom tools
     },
   },

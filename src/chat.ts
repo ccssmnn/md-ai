@@ -90,6 +90,7 @@ export class MarkdownAI {
     for await (let chunk of textStream) {
       stdout.write(chunk);
     }
+    stdout.write("\n");
 
     let responseMessages = (await response).messages;
 

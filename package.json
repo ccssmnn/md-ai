@@ -44,12 +44,15 @@
     "@ai-sdk/google": "^1.2.11",
     "@types/mdast": "^4.0.4",
     "ai": "^4.3.6",
+    "diff": "^7.0.0",
+    "glob": "^11.0.1",
     "remark-parse": "^11.0.0",
     "unified": "^11.0.5",
     "zod": "^3.24.2"
   },
   "devDependencies": {
     "@arethetypeswrong/cli": "^0.17.4",
+    "@types/diff": "^7.0.2",
     "@types/node": "^22.14.1",
     "prettier": "^3.5.3",
     "tsx": "^4.19.3",
