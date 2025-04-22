@@ -4,10 +4,11 @@ import { stdout } from "node:process";
 import { streamText } from "ai";
 import type { CoreMessage } from "ai";
 
-import { askUser, openInEditor } from "./prompts.js";
 import { logger } from "./utils.js";
 import { markdownToMessages } from "./markdown-parse.js";
 import { messagesToMarkdown } from "./markdown-serialize.js";
+import { confirm, isCancel, log, select, stream } from "@clack/prompts";
+import { openInEditor } from "./prompts.js";
 
 type AISDKArgs = Omit<Parameters<typeof streamText>[0], "messages" | "prompt">;
 
@@ -38,17 +39,27 @@ export class MarkdownAI {
 
   /** Runs the chat session. */
   async run(): Promise<void> {
-    let proceed = true;
-    while (proceed) {
+    let canCallLLM = false;
+    while (true) {
       let chat = await this.readChat();
       let next = determineNextTurn(chat);
       if (next.role === "user") {
-        proceed = await this.userturn(next.addHeading);
-      } else {
-        proceed = await this.aiturn(chat);
+        let proceed = await this.userturn(next.addHeading);
+        if (!proceed) break;
+        canCallLLM = false;
+        continue;
       }
+      if (!canCallLLM) {
+        let check = await confirm({
+          message: "Call the LLM?",
+          initialValue: true,
+        });
+        if (check !== true) break;
+        canCallLLM = true;
+      }
+      let proceed = await this.aiturn(chat);
+      if (!proceed) break;
     }
-    console.log("🤓: ok, bye!👋");
   }
 
   /**
@@ -60,10 +71,11 @@ export class MarkdownAI {
     if (addHeading) {
       await appendFile(this.chatPath, "\n## user\n");
     }
-    let answer = await askUser("🤓: open editor to enter user message? (y/n)");
-    if (answer.toLowerCase() !== "y") {
-      return false;
-    }
+    const shouldOpenEditor = await confirm({
+      message: "Open Editor to enter user message?",
+      initialValue: true,
+    });
+    if (shouldOpenEditor !== true) return false;
     await openInEditor(this.editor, this.chatPath);
     return true;
   }
@@ -74,27 +86,17 @@ export class MarkdownAI {
    * @returns A promise that resolves to true if the model generated a response, false otherwise.
    */
   private async aiturn(messages: CoreMessage[]): Promise<boolean> {
-    let answer = await askUser("🤓: invoke the LLM? (y/n)");
-    if (answer.toLowerCase() !== "y") {
-      return false;
-    }
-
-    let requestOptions = { ...this.ai, messages };
-
-    logger({ at: "beforeStreamText", requestOptions });
+    let requestOptions = {
+      ...this.ai,
+      system: `${systemPrompt}\n${this.ai.system ?? ""}`,
+      messages,
+    };
 
     let { textStream, response } = streamText(requestOptions);
 
-    // stream response into stdout to allow reading the response while waiting
-    // for the markdown file to be saved
-    for await (let chunk of textStream) {
-      stdout.write(chunk);
-    }
-    stdout.write("\n");
+    await stream.message(textStream);
 
     let responseMessages = (await response).messages;
-
-    logger({ at: "afterResponseReceived", responseMessages });
 
     await this.writeChat([...messages, ...responseMessages]);
 
@@ -153,3 +155,15 @@ function determineNextTurn(chat: CoreMessage[]): NextTurn {
 
   return { role: "assistant" };
 }
+let systemPrompt = `
+You are operating as Markdown-AI, an agentic coding assistant that lives in the terminal.
+It offers interacting with LLMs in the terminal combined with the users editor of choice.
+You are expected to be helpful and precise.
+
+You can:
+- Receive user prompts, project context and files.
+- Stream responses and emit tool calls: (e.g. list, read and manipulate files)
+- Write code via tool calls.
+
+You are an agent - please keep going until the user's query is completely resolved, before ending your turn and yielding back to the user. Only terminate your turn when you are sure that the problem is solved. If you are not sure about file content or codebase structure pertaining to the user's request, use your tools to read files and gather the relevant information: do NOT guess or make up an answer.
+`;

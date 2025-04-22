@@ -11,19 +11,24 @@ import {
   createReadFilesTool,
   createWriteFilesTool,
 } from "./tools.js";
+import { intro, log, outro } from "@clack/prompts";
+import { tryCatch } from "./utils.js";
 
 function printUsage(): void {
   console.log(`
 Usage: ./cli.js <chat_file_path> [--system=<system_prompt_path>] [-d]
 
+let editor: string = "vi +99999";
   <chat_file_path>       Path to the markdown file for the chat history.
   --max-steps=<number>   Optional number of max steps for tool calling
   --system=<path>        Optional path to a file containing the system prompt.
+  --editor=<command>     Optional editor command. Defaults to 'vi +99999'.
   -d                     Optional flag to set development mode.
 `);
 }
 
-let editor = "vi +99999";
+let defaultEditor = "vi +99999";
+let editor = defaultEditor;
 let path: string | undefined;
 let system: string | undefined;
 let maxSteps = 1;
@@ -47,6 +52,14 @@ for (let i = 2; i < argv.length; i++) {
       console.error(`Error: Could not read system prompt file: ${path}`);
       process.exit(1);
     }
+  } else if (arg.startsWith("--editor=")) {
+    let [, editorPath] = arg.split("=", 2);
+    if (!editorPath) {
+      console.error("Error: --editor requires a command");
+      printUsage();
+      process.exit(1);
+    }
+    editor = editorPath;
   } else if (arg.startsWith("--max-steps=")) {
     let [, n] = arg.split("=", 2);
     if (!n || Number(n) < 1) {
@@ -57,13 +70,12 @@ for (let i = 2; i < argv.length; i++) {
   } else if (!path) {
     path = arg;
   } else {
-    console.error(`Error: Unexpected argument: ${arg}`);
     printUsage();
     process.exit(1);
   }
 }
 
-if (process.env.EDITOR) {
+if (editor === defaultEditor && process.env.EDITOR) {
   editor = process.env.EDITOR;
 }
 
@@ -86,7 +98,7 @@ let options: MarkdownAIOptions = {
   path,
   editor,
   ai: {
-    model: google("gemini-2.0-pro-exp-02-05"),
+    model: google("gemini-2.0-flash"),
     system,
     maxSteps,
     tools: {
@@ -99,6 +111,11 @@ let options: MarkdownAIOptions = {
 
 let chat = new MarkdownAI(options);
 
-await chat.run();
+intro("Markdown AI");
+let res = await tryCatch(chat.run());
+if (!res.ok) {
+  log.error(res.error.message);
+}
+outro("This was fun! See ya!");
 
 process.exit(0);

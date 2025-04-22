@@ -42,6 +42,7 @@
   "types": "./lib/index.d.ts",
   "dependencies": {
     "@ai-sdk/google": "^1.2.11",
+    "@clack/prompts": "^0.10.1",
     "@types/mdast": "^4.0.4",
     "ai": "^4.3.6",
     "diff": "^7.0.0",
