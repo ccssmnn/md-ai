@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { existsSync, readFileSync } from "node:fs";
 import { writeFile } from "node:fs/promises";
-import { argv, env } from "node:process";
+import { argv, env, cwd as processCwd } from "node:process";
 
 import { google } from "@ai-sdk/google";
 
@@ -13,16 +13,18 @@ import {
 } from "./tools.js";
 import { intro, log, outro } from "@clack/prompts";
 import { tryCatch } from "./utils.js";
+import { resolve } from "node:path";
 
 function printUsage(): void {
   console.log(`
-Usage: ./cli.js <chat_file_path> [--system=<system_prompt_path>] [-d]
+Usage: ./cli.js <chat_file_path> [--system=<system_prompt_path>] [--cwd=<working_directory>] [-d]
 
 let editor: string = "vi +99999";
   <chat_file_path>       Path to the markdown file for the chat history.
   --max-steps=<number>   Optional number of max steps for tool calling
   --system=<path>        Optional path to a file containing the system prompt.
   --editor=<command>     Optional editor command. Defaults to 'vi +99999'.
+  --cwd=<path>           Optional working directory for the agent. Defaults to current directory.
   -d                     Optional flag to set development mode.
 `);
 }
@@ -32,6 +34,7 @@ let editor = defaultEditor;
 let path: string | undefined;
 let system: string | undefined;
 let maxSteps = 1;
+let cwd: string = processCwd();
 
 for (let i = 2; i < argv.length; i++) {
   let arg = argv[i];
@@ -67,6 +70,14 @@ for (let i = 2; i < argv.length; i++) {
       process.exit(1);
     }
     maxSteps = Number(n);
+  } else if (arg.startsWith("--cwd=")) {
+    let [, cwdPath] = arg.split("=", 2);
+    if (!cwdPath) {
+      console.error("Error: --cwd requires a path");
+      printUsage();
+      process.exit(1);
+    }
+    cwd = resolve(cwdPath);
   } else if (!path) {
     path = arg;
   } else {
@@ -102,9 +113,9 @@ let options: MarkdownAIOptions = {
     system,
     maxSteps,
     tools: {
-      readFiles: createReadFilesTool(),
-      listFiles: createListFilesTool(),
-      writeFiles: createWriteFilesTool(),
+      readFiles: createReadFilesTool(cwd),
+      listFiles: createListFilesTool(cwd),
+      writeFiles: createWriteFilesTool(cwd),
     },
   },
 };

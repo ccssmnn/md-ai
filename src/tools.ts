@@ -1,6 +1,5 @@
-import { resolve } from "node:path";
+import { resolve, isAbsolute } from "node:path";
 import { unlink, writeFile, readFile, stat } from "node:fs/promises";
-import { cwd } from "node:process";
 
 import { z } from "zod";
 import { tool } from "ai";
@@ -12,11 +11,10 @@ import { isCancel, log, text } from "@clack/prompts";
 let alwaysAllowRead = false;
 let alwaysAllowWrite = false;
 
-let projectRoot = cwd();
 let cachedIgnore: string[] | null = null;
 let cachedMtime: number | null = null;
 
-async function getIgnorePatterns(): Promise<string[]> {
+async function getIgnorePatterns(projectRoot: string): Promise<string[]> {
   let gitignorePath = resolve(projectRoot, ".gitignore");
   let statRes = await tryCatch(stat(gitignorePath));
   let mtime = statRes.ok ? statRes.data.mtimeMs : -1;
@@ -40,8 +38,8 @@ async function getIgnorePatterns(): Promise<string[]> {
   return patterns;
 }
 
-function ensureProjectPath(rel: string): string {
-  let abs = resolve(projectRoot, rel);
+function ensureProjectPath(projectRoot: string, rel: string): string {
+  let abs = isAbsolute(rel) ? rel : resolve(projectRoot, rel);
   if (!abs.startsWith(projectRoot))
     throw new Error("Path outside project root");
   return abs;
@@ -86,17 +84,17 @@ async function confirm(
   return false;
 }
 
-export function createListFilesTool() {
+export function createListFilesTool(cwd: string) {
   return tool({
     description: "list file paths on disk matching one or more glob patterns.",
     parameters: z.object({
       patterns: z.array(z.string()).describe("Glob patterns to list"),
     }),
     execute: async ({ patterns }) => {
-      let ignore = await getIgnorePatterns();
+      let ignore = await getIgnorePatterns(cwd);
       let fileSet = new Set<string>();
       for (let pat of patterns) {
-        (await glob(pat.trim(), { dot: true, ignore })).forEach((p) =>
+        (await glob(pat.trim(), { dot: true, ignore, cwd })).forEach((p) =>
           fileSet.add(p),
         );
       }
@@ -109,7 +107,7 @@ export function createListFilesTool() {
   });
 }
 
-export function createReadFilesTool({ auto = false } = {}) {
+export function createReadFilesTool(cwd: string, { auto = false } = {}) {
   return tool({
     description:
       "open one or more files contents that match one or more glob patterns",
@@ -117,10 +115,10 @@ export function createReadFilesTool({ auto = false } = {}) {
       patterns: z.array(z.string()).describe("glob patterns for files to open"),
     }),
     execute: async ({ patterns }) => {
-      let ignore = await getIgnorePatterns();
+      let ignore = await getIgnorePatterns(cwd);
       let matched = new Set<string>();
       for (let pat of patterns) {
-        (await glob(pat.trim(), { dot: true, ignore })).forEach((p) =>
+        (await glob(pat.trim(), { dot: true, ignore, cwd })).forEach((p) =>
           matched.add(p),
         );
       }
@@ -136,7 +134,7 @@ export function createReadFilesTool({ auto = false } = {}) {
       let allowedFiles = files.filter((_, i) => allowSet!.has(i));
       let results = await Promise.all(
         allowedFiles.map(async (rel) => {
-          let abs = ensureProjectPath(rel);
+          let abs = ensureProjectPath(cwd, rel);
           let res = await tryCatch(readFile(abs, "utf-8"));
           return {
             path: rel,
@@ -152,29 +150,23 @@ export function createReadFilesTool({ auto = false } = {}) {
   });
 }
 
-let lineOperationSchema = z.object({
-  op: z.enum(["add", "delete", "replace"]),
-  line: z.number().int().nonnegative(),
-  content: z.string().optional(),
-});
-
 let fileOperationSchema = z
   .object({
     path: z.string(),
-    lines: z.array(lineOperationSchema).optional(),
+    content: z.string().optional(),
     delete: z.boolean().optional(),
   })
   .refine(
     (o) =>
-      [o.lines !== undefined, o.delete === true].filter(Boolean).length === 1,
-    { message: "Exactly one of lines or delete must be provided" },
+      [o.content !== undefined, o.delete === true].filter(Boolean).length === 1,
+    { message: "Exactly one of content or delete must be provided" },
   );
 
-export function createWriteFilesTool({ auto = false } = {}) {
+export function createWriteFilesTool(cwd: string, { auto = false } = {}) {
   return tool({
     description: [
-      "create, modify, or delete files on disk.",
-      "- For modifications: { path, lines: [{op: 'add'|'delete'|'replace', line: number, content?: string}] }",
+      "create, or delete files on disk.",
+      "- For creating/replacing: { path, content: string }",
       "- For deletions: { path, delete: true }",
     ].join(" "),
     parameters: z.object({ files: z.array(fileOperationSchema) }),
@@ -182,8 +174,8 @@ export function createWriteFilesTool({ auto = false } = {}) {
       let summary = files.map((f) => {
         let action = f.delete
           ? "delete"
-          : f.lines !== undefined
-            ? "modify"
+          : f.content !== undefined
+            ? "create/replace"
             : "unknown";
         return `${f.path} (${action})`;
       });
@@ -198,32 +190,16 @@ export function createWriteFilesTool({ auto = false } = {}) {
         .filter((f) => allowSet!.has(f.idx));
 
       let settled = await Promise.allSettled(
-        tasks.map(async ({ path, lines, delete: del }) => {
+        tasks.map(async ({ path, content, delete: del }) => {
           try {
-            let abs = ensureProjectPath(path);
+            let abs = ensureProjectPath(cwd, path);
             if (del) {
               await unlink(abs);
               return { path, status: "deleted" as const };
             }
-            if (lines !== undefined) {
-              let origRes = await tryCatch(readFile(abs, "utf-8"));
-              if (!origRes.ok) throw origRes.error;
-              let origLines = origRes.data.split("\n");
-              let newLines = [...origLines];
-
-              for (let op of lines) {
-                if (op.op === "add") {
-                  newLines.splice(op.line, 0, op.content!);
-                } else if (op.op === "delete") {
-                  newLines.splice(op.line, 1);
-                } else if (op.op === "replace") {
-                  newLines[op.line] = op.content!;
-                }
-              }
-
-              let updatedContent = newLines.join("\n");
-              await writeFile(abs, updatedContent, "utf-8");
-              return { path, status: "modified" as const };
+            if (content !== undefined) {
+              await writeFile(abs, content, "utf-8");
+              return { path, status: "created/replaced" as const };
             }
             throw new Error("unreachable");
           } catch (err) {

@@ -13,11 +13,6 @@ export function shouldNeverHappen(msg: string, ...args: any[]): never {
   throw new Error(`This should never happen: ${msg}`);
 }
 
-export function logger(arg: any) {
-  if (!isDevEnv()) return;
-  console.dir(arg, { depth: null });
-}
-
 export function isDevEnv(): boolean {
   return env.IS_DEV === "true";
 }
