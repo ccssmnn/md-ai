@@ -11,7 +11,7 @@ import {
   select,
   type MultiSelectOptions,
 } from "@clack/prompts";
-import { shouldNeverHappen } from "../utils.js";
+import { shouldNeverHappen, tryCatch } from "../utils.js";
 
 export function createWriteFilesTool(options: { cwd: string }) {
   return tool({
@@ -25,6 +25,10 @@ FORMAT SPECIFICATION:
    - Do NOT include any other text or commentary.
    - Do NOT wrap your output in markdown or any other delimiters.
 2) PATCH BLOCK STRUCTURE:
+   - Every patch must start with a patch type declaration line: '*** Add File:', '*** Delete File:', or '*** Update File:'.
+   - 'Add File' patches require a '<<< ADD' section followed by the new file content and a '>>>' terminator.
+   - 'Delete File' patches consist only of the declaration line.
+   - 'Update File' patches require a '<<< SEARCH' section with the exact lines to be replaced, a '===' separator, and a section with the replacement lines, followed by a '>>>' terminator.
    *** Add File: <relative/path/to/file>
    <<< ADD
    <new file content lines>
@@ -43,7 +47,12 @@ FORMAT SPECIFICATION:
 4) MULTIPLE PATCHES:
    - Concatenate multiple patch blocks directly, one after another.
    - No blank lines between blocks, unless part of the file content.
+   - Do not skip delimiters when concatenating patches.
+5) ERROR AVOIDANCE:
+   - Ensure that every '<<< ADD' and '<<< SEARCH' block is properly terminated with a corresponding '>>>'.
+   - The search section in 'Update File' patches must contain the exact lines present in the original file.
 EXAMPLE:
+"""
 *** Add File: src/new.txt
 <<< ADD
 Hello, world!
@@ -56,13 +65,27 @@ port: 3000,
 ===
 port: 4000,
 >>>
+*** Update File: src/config.js
+<<< SEARCH
+host: "localhost",
+===
+host: "0.0.0.0",
+>>>
+"""
+
 Follow these rules exactly. Output begins immediately with the first *** line of the first patch block.
 `,
     parameters: z.object({ patch: z.string() }),
     execute: async ({ patch: patchString }) => {
       let { cwd } = options;
-      let patches = parsePatchString(patchString);
-
+      let parsedPatchesResult = tryCatch(() => parsePatchString(patchString));
+      if (!parsedPatchesResult.ok) {
+        return {
+          ok: false,
+          reason: `Error: Failed to parse patch string: ${parsedPatchesResult.error.message}`,
+        };
+      }
+      let patches = parsedPatchesResult.data;
       let patchOptions = patches.map(
         (patch, i): MultiSelectOptions<number>["options"][number] => {
           if (patch.type === "delete")
@@ -245,6 +268,21 @@ export function parsePatchString(patchString: string): Array<FilePatch> {
     }
   }
 
+  let addFileCount = patchString
+    .split("\n")
+    .filter((line) => line.startsWith("*** Add File:")).length;
+  let updateFileCount = patchString
+    .split("\n")
+    .filter((line) => line.startsWith("*** Update File:")).length;
+  let deleteFileCount = patchString
+    .split("\n")
+    .filter((line) => line.startsWith("*** Delete File:")).length;
+
+  if (addFileCount + updateFileCount + deleteFileCount !== patches.length) {
+    throw new Error(
+      "The number of patch declarations does not match the number of parsed patches.",
+    );
+  }
   return patches;
 }
 

@@ -48,6 +48,7 @@ program
     process.env.EDITOR || "vi +99999",
   )
   .option("-c, --cwd <path>", "Working directory for file tools", processCwd())
+  .option("--no-tools", "Disable file tools (pure chat mode)")
   .parse(process.argv);
 
 let opts = program.opts();
@@ -87,7 +88,15 @@ if (!existsSync(resolvedChatPath)) {
   }
 }
 
-// Build options for MarkdownAI
+// Build tools object only if not disabled
+let toolsOption = opts.tools
+  ? {
+      listFiles: createListFilesTool({ cwd }),
+      readFiles: createReadFilesTool({ cwd }),
+      writeFiles: createWriteFilesTool({ cwd }),
+    }
+  : undefined;
+
 let options: MarkdownAIOptions = {
   path: resolvedChatPath,
   editor: opts.editor,
@@ -95,11 +104,7 @@ let options: MarkdownAIOptions = {
     model,
     system,
     maxSteps: opts.maxSteps,
-    tools: {
-      listFiles: createListFilesTool({ cwd }),
-      readFiles: createReadFilesTool({ cwd }),
-      writeFiles: createWriteFilesTool({ cwd }),
-    },
+    ...(toolsOption ? { tools: toolsOption } : {}),
   },
 };
 
