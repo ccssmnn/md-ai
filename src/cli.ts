@@ -1,114 +1,100 @@
 #!/usr/bin/env node
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
-import { argv, env, cwd as processCwd } from "node:process";
 
+import { existsSync } from "node:fs";
+import { cwd as processCwd } from "node:process";
+import { resolve } from "node:path";
+import { readFile, writeFile } from "node:fs/promises";
+
+import { Command } from "commander";
 import { google } from "@ai-sdk/google";
+import { openai } from "@ai-sdk/openai";
+import { anthropic } from "@ai-sdk/anthropic";
+import { intro, log, outro } from "@clack/prompts";
+import { createProviderRegistry } from "ai";
 
 import { MarkdownAI, type MarkdownAIOptions } from "./chat.js";
-import { intro, log, outro } from "@clack/prompts";
 import { tryCatch } from "./utils.js";
-import { resolve } from "node:path";
 import { createReadFilesTool } from "./tools/read-files.js";
 import { createListFilesTool } from "./tools/list-files.js";
 import { createWriteFilesTool } from "./tools/write-files.js";
 
-function printUsage(): void {
-  console.log(`
-Usage: ./cli.js <chat_file_path> [--system=<system_prompt_path>] [--cwd=<working_directory>] [-d]
+let registry = createProviderRegistry({ anthropic, openai, google });
 
-let editor: string = "vi +99999";
-  <chat_file_path>       Path to the markdown file for the chat history.
-  --max-steps=<number>   Optional number of max steps for tool calling
-  --system=<path>        Optional path to a file containing the system prompt.
-  --editor=<command>     Optional editor command. Defaults to 'vi +99999'.
-  --cwd=<path>           Optional working directory for the agent. Defaults to current directory.
-  -d                     Optional flag to set development mode.
-`);
+function fatal(message: string, code = 1): never {
+  console.error(`Error: ${message}`);
+  process.exit(code);
 }
 
-let defaultEditor = "vi +99999";
-let editor = defaultEditor;
-let path: string | undefined;
+let program = new Command();
+program
+  .name("md-ai")
+  .description("Interactive Markdown-based AI agent")
+  .argument("<chatFile>", "Path to the markdown file for the chat history.")
+  .option("-s, --system <path>", "Path to a file containing a system prompt")
+  .option(
+    "-m, --model <provider:model>",
+    "provider:model to use",
+    "google:gemini-2.0-flash",
+  )
+  .option(
+    "--max-steps <number>",
+    "Number of max steps for tool calling",
+    (v) => parseInt(v, 10),
+    10,
+  )
+  .option(
+    "-e, --editor <cmd>",
+    "Editor command",
+    process.env.EDITOR || "vi +99999",
+  )
+  .option("-c, --cwd <path>", "Working directory for file tools", processCwd())
+  .parse(process.argv);
+
+let opts = program.opts();
+let chatFile = program.args[0];
+if (!chatFile) {
+  fatal("Missing required <chatFile> argument");
+}
+
+// Resolve paths
+let resolvedChatPath = resolve(chatFile);
+let cwd = resolve(opts.cwd);
+
+// Read system prompt
 let system: string | undefined;
-let maxSteps = 10;
-let cwd: string = processCwd();
+if (opts.system) {
+  let systemRes = await tryCatch(readFile(opts.system, "utf-8"));
+  if (!systemRes.ok) {
+    fatal(`Could not read system prompt file: ${opts.system}`);
+  }
+  system = systemRes.data;
+}
 
-for (let i = 2; i < argv.length; i++) {
-  let arg = argv[i];
-  if (!arg) continue;
+// Instantiate model
+let modelRes = tryCatch(() => registry.languageModel(opts.model));
+if (!modelRes.ok) {
+  fatal(modelRes.error.message);
+}
+let model = modelRes.data;
 
-  if (arg === "-d") {
-    env.IS_DEV = "true";
-  } else if (arg.startsWith("--system=")) {
-    let [, path] = arg.split("=", 2);
-    if (!path) {
-      console.error("Error: --system requires a path");
-      printUsage();
-      process.exit(1);
-    }
-    try {
-      system = readFileSync(path, { encoding: "utf-8" });
-    } catch (error) {
-      console.error(`Error: Could not read system prompt file: ${path}`);
-      process.exit(1);
-    }
-  } else if (arg.startsWith("--editor=")) {
-    let [, editorPath] = arg.split("=", 2);
-    if (!editorPath) {
-      console.error("Error: --editor requires a command");
-      printUsage();
-      process.exit(1);
-    }
-    editor = editorPath;
-  } else if (arg.startsWith("--max-steps=")) {
-    let [, n] = arg.split("=", 2);
-    if (!n || Number(n) < 1) {
-      console.error("Error: --max-steps requires a number >0");
-      process.exit(1);
-    }
-    maxSteps = Number(n);
-  } else if (arg.startsWith("--cwd=")) {
-    let [, cwdPath] = arg.split("=", 2);
-    if (!cwdPath) {
-      console.error("Error: --cwd requires a path");
-      printUsage();
-      process.exit(1);
-    }
-    cwd = resolve(cwdPath);
-  } else if (!path) {
-    path = arg;
-  } else {
-    printUsage();
-    process.exit(1);
+// Ensure chat file exists
+if (!existsSync(resolvedChatPath)) {
+  let writeRes = await tryCatch(
+    writeFile(resolvedChatPath, "", { encoding: "utf-8" }),
+  );
+  if (!writeRes.ok) {
+    fatal(`Could not create chat file: ${resolvedChatPath}`);
   }
 }
 
-if (editor === defaultEditor && process.env.EDITOR) {
-  editor = process.env.EDITOR;
-}
-
-if (!path) {
-  console.error("Error: Missing chat file path");
-  printUsage();
-  process.exit(1);
-}
-
-if (!existsSync(path)) {
-  try {
-    writeFileSync(path, "", { encoding: "utf-8" });
-  } catch (error) {
-    console.error(`Error: Could not create chat file: ${path}`);
-    process.exit(1);
-  }
-}
-
+// Build options for MarkdownAI
 let options: MarkdownAIOptions = {
-  path,
-  editor,
+  path: resolvedChatPath,
+  editor: opts.editor,
   ai: {
-    model: google("gemini-2.0-flash"),
+    model,
     system,
-    maxSteps,
+    maxSteps: opts.maxSteps,
     tools: {
       listFiles: createListFilesTool({ cwd }),
       readFiles: createReadFilesTool({ cwd }),
@@ -119,18 +105,11 @@ let options: MarkdownAIOptions = {
 
 let chat = new MarkdownAI(options);
 
-async function main(): Promise<void> {
-  intro("Markdown AI");
-  const res = await tryCatch(chat.run());
-  if (!res.ok) {
-    log.error(res.error.message);
-    process.exit(1);
-  }
-  outro("This was fun! See ya!");
-  process.exit(0);
-}
-
-main().catch((error) => {
-  console.error(error);
+intro("Markdown AI");
+let res = await tryCatch(chat.run());
+if (!res.ok) {
+  log.error(res.error.message);
   process.exit(1);
-});
+}
+outro("This was fun! See ya!");
+process.exit(0);

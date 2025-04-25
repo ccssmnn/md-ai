@@ -3,117 +3,152 @@ import { readFile, unlink, writeFile } from "node:fs/promises";
 import { z } from "zod";
 import { tool } from "ai";
 
-import { ensureProjectPath, confirm } from "./_shared.js";
-import { log } from "@clack/prompts";
+import { ensureProjectPath } from "./_shared.js";
+import {
+  isCancel,
+  log,
+  multiselect,
+  select,
+  type MultiSelectOptions,
+} from "@clack/prompts";
 import { shouldNeverHappen } from "../utils.js";
 
-export function createWriteFilesTool(options: { auto?: boolean; cwd: string }) {
+export function createWriteFilesTool(options: { cwd: string }) {
   return tool({
-    description: `This tool accepts a custom unified patch string for adding, deleting, or updating files.
-The patch string should adhere to the following format:
-
-"""
-*** Add File: path/to/file.txt
+    description: `
+STRICT PATCH FORMAT:
+│
+You are given a task to produce one or more patch blocks for file modifications. You MUST strictly follow the PATCH FORMAT below. Respond with only the patch text—no explanations, no apologies, no markdown or code fences, and no extra content.
+│
+FORMAT SPECIFICATION:
+1) OUTPUT ONLY PATCH BLOCKS:
+   - Do NOT include any other text or commentary.
+   - Do NOT wrap your output in markdown or any other delimiters.
+2) PATCH BLOCK STRUCTURE:
+   *** Add File: <relative/path/to/file>
+   <<< ADD
+   <new file content lines>
+   >>>
+   *** Delete File: <relative/path/to/file>
+   *** Update File: <relative/path/to/file>
+   <<< SEARCH
+   <exact existing lines to replace (including context)>
+   ===
+   <exact replacement lines>
+   >>>
+3) DELIMITERS AND WHITESPACE:
+   - Each delimiter (***, <<<, ===, >>>) must start at the beginning of its line.
+   - Use UNIX newlines (\n) only.
+   - Do NOT include trailing spaces.
+4) MULTIPLE PATCHES:
+   - Concatenate multiple patch blocks directly, one after another.
+   - No blank lines between blocks, unless part of the file content.
+EXAMPLE:
+*** Add File: src/new.txt
 <<< ADD
-content
-to
-write
+Hello, world!
+This is a new file.
 >>>
-*** Delete File: path/to/file.txt
-*** Update File: path/to/file.txt
+*** Delete File: src/old.txt
+*** Update File: src/config.js
 <<< SEARCH
-content
-that
-needs
-the
-update
+port: 3000,
 ===
-content
-that
-got
-the update
+port: 4000,
 >>>
-"""
-
-Each patch starts with a line beginning with "***" followed by the operation type (Add File, Delete File, or Update File) and the file path.
-
-- Add File: Includes the content to be added within the "<<< ADD" and ">>>" delimiters.
-- Delete File: No additional content is needed after the file path.
-- Update File: Requires a "<<< SEARCH" block containing the content to be replaced, followed by "===", and then a block containing the replacement content within the ">>>" delimiters.
-
-For Update File operations, ensure the "<<< SEARCH" block includes sufficient surrounding lines to uniquely identify the content to be replaced, minimizing the risk of unintended changes.
-
-You can have as many or as little patches as you like in this string.`,
+Follow these rules exactly. Output begins immediately with the first *** line of the first patch block.
+`,
     parameters: z.object({ patch: z.string() }),
     execute: async ({ patch: patchString }) => {
-      let { cwd, auto = false } = options;
+      let { cwd } = options;
       let patches = parsePatchString(patchString);
 
-      let allowSet: Set<number> | false = new Set(patches.map((_, i) => i));
+      let patchOptions = patches.map(
+        (patch, i): MultiSelectOptions<number>["options"][number] => {
+          if (patch.type === "delete")
+            return { value: i, label: `DELETE ${patch.path}` };
+          if (patch.type === "add")
+            return { value: i, label: `ADD ${patch.path}` };
+          if (patch.type === "update")
+            return { value: i, label: `UPDATE ${patch.path}` };
+          shouldNeverHappen(`unexpected patch type ${JSON.stringify(patch)}`);
+        },
+      );
 
-      let summary = patches.map((patch, i) => {
-        if (patch.type === "delete") return `${i + 1}: DELETE ${patch.path}`;
-        if (patch.type === "add") return `${i + 1}: ADD ${patch.path}`;
-        if (patch.type === "update") return `${i + 1}: UPDATE ${patch.path}`;
-        shouldNeverHappen(`unexpected patch type ${patch}`);
-      });
-
+      // we want the user to decide which patch to apply
+      // so we log the patch string here and then prompt for confirmation
       log.info(patchString);
-      if (!auto) allowSet = await confirm(summary);
-      if (allowSet === false || allowSet.size === 0) {
-        return { ok: false, error: "User denied write request" };
+
+      // AI: Implementing a two-step prompt for patch selection: first, choose between "all", "none", or "some"; then, if "some" is selected, choose specific patches.
+      let firstResponse = await select({
+        message: "Choose which patches to apply",
+        options: [
+          { value: "all", label: "All" },
+          { value: "none", label: "None" },
+          { value: "some", label: "Some" },
+        ],
+      });
+      if (isCancel(firstResponse)) throw Error("user has canceled");
+
+      if (firstResponse === "none") {
+        return {
+          ok: false,
+          reason: "the user did not allow any of the patches.",
+        };
       }
-      let allowedPatches = patches
-        .map((f, i) => ({ ...f, idx: i }))
-        .filter((f) => allowSet!.has(f.idx));
 
-      let results: any[] = [];
-      for (let patch of allowedPatches) {
-        try {
-          if (patch.type === "add") {
-            let projectPath = ensureProjectPath(cwd, patch.path);
-            await writeFile(projectPath, patch.content, {
-              encoding: "utf-8",
-            });
-            results.push({
-              ok: true,
-              path: patch.path,
-              status: "add" as const,
-            });
-          } else if (patch.type === "delete") {
-            let projectPath = ensureProjectPath(cwd, patch.path);
-            await unlink(projectPath);
-            results.push({
-              ok: true,
-              path: patch.path,
-              status: "delete" as const,
-            });
-          } else if (patch.type === "update") {
-            let projectPath = ensureProjectPath(cwd, patch.path);
-            let content = await readFile(projectPath, { encoding: "utf-8" });
-            let updatedContent = applyPatchToString(content, patch);
+      let results = [];
 
-            if (updatedContent === null) {
-              results.push({
-                ok: false,
-                path: patch.path,
-                status: "update-failed" as const,
-                error: "Patch could not be applied",
-              });
-            } else {
-              await writeFile(projectPath, updatedContent);
-              results.push({
-                ok: true,
-                path: patch.path,
-                status: "update" as const,
-              });
-            }
-          } else {
-            shouldNeverHappen(`unexpected patch type ${patch}`);
+      if (firstResponse === "some") {
+        let response = await multiselect<number>({
+          message: "Choose which patches to apply",
+          options: patchOptions,
+        });
+        if (isCancel(response)) throw Error("user has canceled");
+        patches = patches.filter((_, i) => {
+          let keep = response.includes(i);
+          if (!keep) {
+            results.push({ ok: false, path: _.path, status: "user-denied" });
           }
-        } catch (error: any) {
-          results.push(error);
+          return keep;
+        });
+      }
+
+      for (let patch of patches) {
+        if (patch.type === "add") {
+          let projectPath = ensureProjectPath(cwd, patch.path);
+          await writeFile(projectPath, patch.content, { encoding: "utf-8" });
+          results.push({ ok: true, path: patch.path, status: "add" });
+          continue;
         }
+        if (patch.type === "delete") {
+          let projectPath = ensureProjectPath(cwd, patch.path);
+          await unlink(projectPath);
+          results.push({ ok: true, path: patch.path, status: "delete" });
+          continue;
+        }
+        if (patch.type === "update") {
+          let projectPath = ensureProjectPath(cwd, patch.path);
+          let content = await readFile(projectPath, { encoding: "utf-8" });
+          let updatedContent = applyPatchToString(content, patch);
+          if (updatedContent === null) {
+            results.push({
+              ok: false,
+              path: patch.path,
+              status: "update-failed",
+            });
+          } else {
+            await writeFile(projectPath, updatedContent, { encoding: "utf-8" });
+            results.push({
+              ok: true,
+              path: patch.path,
+              status: "update-successful",
+            });
+          }
+
+          continue;
+        }
+        shouldNeverHappen(`unexpected patch type ${JSON.stringify(patch)}`);
       }
 
       let ok = results.every((r) => r.ok);

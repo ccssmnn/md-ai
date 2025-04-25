@@ -5,7 +5,7 @@ import type { CoreMessage } from "ai";
 
 import { markdownToMessages } from "./markdown-parse.js";
 import { messagesToMarkdown } from "./markdown-serialize.js";
-import { confirm, log, stream } from "@clack/prompts";
+import { confirm, log, spinner, stream } from "@clack/prompts";
 import { openInEditor } from "./prompts.js";
 
 type AISDKArgs = Omit<Parameters<typeof streamText>[0], "messages" | "prompt">;
@@ -90,12 +90,32 @@ export class MarkdownAI {
       messages,
     };
 
+    // show spinner while waiting for model to start streaming
+    const spin = spinner();
+    spin.start("Thinking...");
     let { textStream, response } = streamText({
       ...requestOptions,
       onError: ({ error }) => log.error(`⚠️ streamText error: ${error}`),
     });
 
-    await stream.message(textStream);
+    // stop spinner on first token and forward all chunks
+    const interceptedStream = (async function* () {
+      let first = true;
+      for await (const chunk of textStream) {
+        if (first) {
+          spin.stop();
+          first = false;
+        }
+        yield chunk;
+      }
+    })();
+
+    // ensure spinner is stopped even if no tokens were streamed
+    try {
+      await stream.message(interceptedStream);
+    } finally {
+      spin.stop();
+    }
 
     let responseMessages = (await response).messages;
 
@@ -156,6 +176,7 @@ function determineNextTurn(chat: CoreMessage[]): NextTurn {
 
   return { role: "assistant" };
 }
+
 let systemPrompt = `
 You are operating as Markdown-AI, an agentic coding assistant that lives in the terminal.
 It offers interacting with LLMs in the terminal combined with the users editor of choice.

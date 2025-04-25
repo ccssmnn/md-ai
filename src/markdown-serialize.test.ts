@@ -3,37 +3,38 @@ import { strict as assert } from "node:assert";
 import { messagesToMarkdown } from "./markdown-serialize.js";
 import type { CoreMessage } from "ai";
 
-test("messagesToMarkdown: with tool call and response", () => {
-  const messages: CoreMessage[] = [
-    { role: "user", content: "call the tool for me" },
-    {
-      role: "assistant",
-      content: [
-        { type: "text", text: "will do!\n" },
-        {
-          type: "tool-call",
-          toolCallId: "1234",
-          toolName: "myTool",
-          args: { msg: "hello tool" },
-        },
-      ],
-    },
-    {
-      role: "tool",
-      content: [
-        {
-          type: "tool-result",
-          toolCallId: "1234",
-          toolName: "myTool",
-          result: { response: "hello agent" },
-        },
-      ],
-    },
-  ];
+test("messagesToMarkdown", async (t) => {
+  await t.test("with tool call and response", () => {
+    const messages: CoreMessage[] = [
+      { role: "user", content: "call the tool for me" },
+      {
+        role: "assistant",
+        content: [
+          { type: "text", text: "will do!\n" },
+          {
+            type: "tool-call",
+            toolCallId: "1234",
+            toolName: "myTool",
+            args: { msg: "hello tool" },
+          },
+        ],
+      },
+      {
+        role: "tool",
+        content: [
+          {
+            type: "tool-result",
+            toolCallId: "1234",
+            toolName: "myTool",
+            result: { response: "hello agent" },
+          },
+        ],
+      },
+    ];
 
-  const markdown = messagesToMarkdown(messages);
+    const markdown = messagesToMarkdown(messages);
 
-  const expected = `## user
+    const expected = `## user
 
 call the tool for me
 
@@ -53,5 +54,6 @@ will do!
 \`\`\`
 `;
 
-  assert.equal(markdown, expected);
+    assert.equal(markdown, expected);
+  });
 });

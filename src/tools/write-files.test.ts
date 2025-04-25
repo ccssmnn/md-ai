@@ -127,5 +127,49 @@ This is the new content.
 This is the last line.`,
     );
   });
+
+  await t.test(
+    "should apply a complex update patch with multiline content and context",
+    () => {
+      let originalContent = `export function add(a: number, b: number) {
+  return a + b;
+}
+
+export function subtract(a: number, b: number) {
+  return a - b;
+}`;
+      let patch1 = {
+        type: "update",
+        path: "src/math.ts",
+        search: `export function add(a: number, b: number) {
+  return a + b;
+}`,
+        replace: `export function add(a: number, b: number) {
+  return b + a;
+}`,
+      } as const;
+      originalContent = applyPatchToString(originalContent, patch1)!;
+      let patch2 = {
+        type: "update",
+        path: "src/math.ts",
+        search: `export function subtract(a: number, b: number) {
+  return a - b;
+}`,
+        replace: `export function subtract(a: number, b: number) {
+  return b - a;
+}`,
+      } as const;
+      let newContent = applyPatchToString(originalContent, patch2);
+      assert.strictEqual(
+        newContent,
+        `export function add(a: number, b: number) {
+  return b + a;
+}
+
+export function subtract(a: number, b: number) {
+  return b - a;
+}`,
+      );
+    },
+  );
 });
-// AI: Updated tests to reflect that applyPatchToString replaces full lines. Added a test case for multiline content.);

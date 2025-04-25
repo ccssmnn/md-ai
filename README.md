@@ -91,13 +91,40 @@ let messages: Array<CoreMessage> = [
 ## Command-line Usage
 
 ```bash
-export GOOGLE_GENERATIVE_AI_API_KEY=blablabla # uses gemini-2.0-flash by default
-export EDITOR="hx +99999" # defaults to vi
-# or
-export EDITOR="code --wait"
-
-node lib/cli.js chat.md --system=system.md --max-steps=5
+export GOOGLE_GENERATIVE_AI_API_KEY=your_api_key
 ```
+
+Run the Markdown AI CLI:
+
+```bash
+md-ai <chat.md> [options]
+```
+*** Update File: README.md
+<<< SEARCH
+```bash
+markdown-ai chat.md --system system.md --model google:gemini-2.0-flash --max-steps=5
+markdown-ai chat.md --model openai:gpt-4 --cwd ./src
+```
+===
+```bash
+md-ai chat.md --system system.md --model google:gemini-2.0-flash --max-steps=5
+md-ai chat.md --model openai:gpt-4 --cwd ./src
+```
+
+Examples:
+
+```bash
+markdown-ai chat.md --system system.md --model google:gemini-2.0-flash --max-steps=5
+markdown-ai chat.md --model openai:gpt-4 --cwd ./src
+```
+
+Options:
+
+- -s, --system <path>      Path to a file containing a system prompt.
+- -m, --model <provider:model>  Provider and model to use (default: google:gemini-2.0-flash).
+- --max-steps <number>     Maximum number of tool-calling steps (default: 10).
+- -e, --editor <cmd>       Editor command (default: $EDITOR or 'vi +99999').
+- -c, --cwd <path>         Working directory for file tools (default: current working directory).
 
 ## Library Usage
 
