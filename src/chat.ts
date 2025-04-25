@@ -5,7 +5,7 @@ import type { CoreMessage } from "ai";
 
 import { markdownToMessages } from "./markdown-parse.js";
 import { messagesToMarkdown } from "./markdown-serialize.js";
-import { confirm, stream } from "@clack/prompts";
+import { confirm, log, stream } from "@clack/prompts";
 import { openInEditor } from "./prompts.js";
 
 type AISDKArgs = Omit<Parameters<typeof streamText>[0], "messages" | "prompt">;
@@ -90,7 +90,10 @@ export class MarkdownAI {
       messages,
     };
 
-    let { textStream, response } = streamText(requestOptions);
+    let { textStream, response } = streamText({
+      ...requestOptions,
+      onError: ({ error }) => log.error(`⚠️ streamText error: ${error}`),
+    });
 
     await stream.message(textStream);
 

@@ -47,6 +47,7 @@ will do!
 
 ## tool
 
+
 \`\`\`tool-result
 {"toolCallId":"1234","toolName":"myTool","result":{"response":"hello agent"}}
 \`\`\`

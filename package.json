@@ -2,7 +2,7 @@
   "name": "md-ai",
   "version": "0.0.1",
   "author": "Carl Assmann <assmann@hey.com> (https://carlassmann.com)",
-  "description": "AI conversations in markdown with your preferred editor",
+  "description": "AI conversations and agentic coding in markdown with your preferred editor",
   "url": "https://github.com/ccssmnn/md-ai",
   "bugs": {
     "url": "https://github.com/ccssmnn/md-ai/issues"
@@ -13,6 +13,7 @@
   },
   "keywords": [
     "ai",
+    "agent",
     "llm",
     "chatgpt",
     "markdown",
@@ -43,7 +44,6 @@
   "dependencies": {
     "@ai-sdk/google": "^1.2.13",
     "@clack/prompts": "^0.10.1",
-    "@types/mdast": "^4.0.4",
     "ai": "^4.3.9",
     "glob": "^11.0.2",
     "remark-parse": "^11.0.0",
@@ -53,6 +53,7 @@
   "devDependencies": {
     "@arethetypeswrong/cli": "^0.17.4",
     "@types/node": "^22.14.1",
+    "@types/mdast": "^4.0.4",
     "prettier": "^3.5.3",
     "tsx": "^4.19.3",
     "typescript": "^5.8.3"

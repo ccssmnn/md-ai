@@ -11,4 +11,12 @@ export const utils = {
   messagesToMarkdown,
 };
 
-export * as tools from "./tools.js";
+import { createListFilesTool } from "./tools/list-files.js";
+import { createReadFilesTool } from "./tools/read-files.js";
+import { createWriteFilesTool } from "./tools/write-files.js";
+
+export const tools = {
+  createWriteFilesTool,
+  createReadFilesTool,
+  createListFilesTool,
+};

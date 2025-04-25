@@ -1,6 +1,6 @@
 import assert from "node:assert";
-import { markdownToMessages } from "./markdown-parse.js";
 import test from "node:test";
+import { markdownToMessages } from "./markdown-parse.js";
 import type { CoreMessage } from "ai";
 
 test("markdownToMessages: minimal example", () => {
@@ -54,7 +54,6 @@ will do!
 \`\`\`
 
 ## tool
-
 
 \`\`\`tool-result
 {

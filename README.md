@@ -1,9 +1,4 @@
-‼️ This is still work in progress
-
-TODO:
-
-- Allow picking a model via CLI flag
-- Enable / Disable tools via flags
+‼️ this is work in progress
 
 # Markdown AI
 
@@ -22,7 +17,6 @@ A command-line tool and library for working with AI using markdown in your own `
 
 At the core the chat is serialized into markdown after each AI invocation.
 You can read and edit the markdown and it will be parsed into messages before sent to the AI.
-
 Example:
 
 ```
@@ -97,7 +91,7 @@ let messages: Array<CoreMessage> = [
 ## Command-line Usage
 
 ```bash
-export GOOGLE_GENERATIVE_AI_API_KEY=blablabla # uses gemini-2.0-pro-exp-02-05 by default
+export GOOGLE_GENERATIVE_AI_API_KEY=blablabla # uses gemini-2.0-flash by default
 export EDITOR="hx +99999" # defaults to vi
 # or
 export EDITOR="code --wait"
@@ -118,7 +112,7 @@ const chat = new MarkdownAI({
   editor: "code --wait",
   ai: {
     // these are forwarded to the "ai" `steamText` call
-    model: google("gemini-2.0-pro-exp-02-05"), // Example model, align with CLI default
+    model: google("gemini-2.0-flash"), // Example model, align with CLI default
     system: "You are a helpful assistant.",
     maxSteps: 5,
     tools: {

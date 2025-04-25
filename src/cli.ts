@@ -1,19 +1,16 @@
 #!/usr/bin/env node
-import { existsSync, readFileSync } from "node:fs";
-import { writeFile } from "node:fs/promises";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { argv, env, cwd as processCwd } from "node:process";
 
 import { google } from "@ai-sdk/google";
 
 import { MarkdownAI, type MarkdownAIOptions } from "./chat.js";
-import {
-  createListFilesTool,
-  createReadFilesTool,
-  createWriteFilesTool,
-} from "./tools.js";
 import { intro, log, outro } from "@clack/prompts";
 import { tryCatch } from "./utils.js";
 import { resolve } from "node:path";
+import { createReadFilesTool } from "./tools/read-files.js";
+import { createListFilesTool } from "./tools/list-files.js";
+import { createWriteFilesTool } from "./tools/write-files.js";
 
 function printUsage(): void {
   console.log(`
@@ -33,7 +30,7 @@ let defaultEditor = "vi +99999";
 let editor = defaultEditor;
 let path: string | undefined;
 let system: string | undefined;
-let maxSteps = 1;
+let maxSteps = 10;
 let cwd: string = processCwd();
 
 for (let i = 2; i < argv.length; i++) {
@@ -98,7 +95,7 @@ if (!path) {
 
 if (!existsSync(path)) {
   try {
-    await writeFile(path, "", { encoding: "utf-8" });
+    writeFileSync(path, "", { encoding: "utf-8" });
   } catch (error) {
     console.error(`Error: Could not create chat file: ${path}`);
     process.exit(1);
@@ -113,20 +110,27 @@ let options: MarkdownAIOptions = {
     system,
     maxSteps,
     tools: {
-      readFiles: createReadFilesTool(cwd),
-      listFiles: createListFilesTool(cwd),
-      writeFiles: createWriteFilesTool(cwd),
+      listFiles: createListFilesTool({ cwd }),
+      readFiles: createReadFilesTool({ cwd }),
+      writeFiles: createWriteFilesTool({ cwd }),
     },
   },
 };
 
 let chat = new MarkdownAI(options);
 
-intro("Markdown AI");
-let res = await tryCatch(chat.run());
-if (!res.ok) {
-  log.error(res.error.message);
+async function main(): Promise<void> {
+  intro("Markdown AI");
+  const res = await tryCatch(chat.run());
+  if (!res.ok) {
+    log.error(res.error.message);
+    process.exit(1);
+  }
+  outro("This was fun! See ya!");
+  process.exit(0);
 }
-outro("This was fun! See ya!");
 
-process.exit(0);
+main().catch((error) => {
+  console.error(error);
+  process.exit(1);
+});
