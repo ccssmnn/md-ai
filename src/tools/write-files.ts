@@ -4,6 +4,8 @@ import { z } from "zod";
 import { tool } from "ai";
 
 import { ensureProjectPath } from "./_shared.js";
+import { mkdir, rename } from "fs/promises";
+import { dirname } from "path";
 import {
   isCancel,
   log,
@@ -150,6 +152,15 @@ Follow these rules exactly. Output begins immediately with the first *** line of
           results.push({ ok: true, path: patch.path, status: "delete" });
           continue;
         }
+        if (patch.type === "move") {
+          let projectPathFrom = ensureProjectPath(cwd, patch.path);
+          let projectPathTo = ensureProjectPath(cwd, patch.to);
+          const dir = dirname(projectPathTo);
+          await mkdir(dir, { recursive: true });
+          await rename(projectPathFrom, projectPathTo);
+          results.push({ ok: true, path: patch.path, status: "move" });
+          continue;
+        }
         if (patch.type === "update") {
           let projectPath = ensureProjectPath(cwd, patch.path);
           let content = await readFile(projectPath, { encoding: "utf-8" });
@@ -200,6 +211,11 @@ type FilePatch =
       path: string;
       search: string;
       replace: string;
+    }
+  | {
+      type: "move";
+      path: string;
+      to: string;
     };
 
 /**
@@ -234,6 +250,26 @@ export function parsePatchString(patchString: string): Array<FilePatch> {
     } else if (line.startsWith("*** Delete File:")) {
       let path = line.substring("*** Delete File:".length).trim();
       patches.push({ type: "delete", path: path });
+      i++;
+    } else if (line.startsWith("*** Move File:")) {
+      let path = line.substring("*** Move File:".length).trim();
+      i++;
+      if (i >= lines.length || lines[i]?.trim() !== "<<< TO") {
+        i++; // consume the line
+        continue;
+      }
+      i++;
+      let toLines: string[] = [];
+      while (i < lines.length && lines[i]?.trim() !== ">>>") {
+        toLines.push(lines[i] ?? "");
+        i++;
+      }
+      let to = toLines.join("\n");
+      patches.push({
+        type: "move",
+        path: path,
+        to: to,
+      });
       i++;
     } else if (line.startsWith("*** Update File:")) {
       let path = line.substring("*** Update File:".length).trim();
@@ -277,8 +313,11 @@ export function parsePatchString(patchString: string): Array<FilePatch> {
   let deleteFileCount = patchString
     .split("\n")
     .filter((line) => line.startsWith("*** Delete File:")).length;
+  let moveFileCount = patchString
+    .split("\n")
+    .filter((line) => line.startsWith("*** Move File:")).length;
 
-  if (addFileCount + updateFileCount + deleteFileCount !== patches.length) {
+  if (addFileCount + updateFileCount + deleteFileCount + moveFileCount !== patches.length) {
     throw new Error(
       "The number of patch declarations does not match the number of parsed patches.",
     );

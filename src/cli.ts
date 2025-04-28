@@ -17,6 +17,7 @@ import { tryCatch } from "./utils.js";
 import { createReadFilesTool } from "./tools/read-files.js";
 import { createListFilesTool } from "./tools/list-files.js";
 import { createWriteFilesTool } from "./tools/write-files.js";
+import { createGrepSearchTool } from "./tools/grep-search.js";
 
 let registry = createProviderRegistry({ anthropic, openai, google });
 
@@ -94,6 +95,7 @@ let toolsOption = opts.tools
       listFiles: createListFilesTool({ cwd }),
       readFiles: createReadFilesTool({ cwd }),
       writeFiles: createWriteFilesTool({ cwd }),
+      grepSearch: createGrepSearchTool({ cwd }),
     }
   : undefined;
 
