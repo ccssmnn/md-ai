@@ -14,11 +14,12 @@ export function createListFilesTool(options: { cwd: string }) {
     execute: async ({ patterns }) => {
       let ignore = await getIgnorePatterns(options.cwd);
       let fileSet = new Set<string>();
-      for (let pat of patterns) {
-        (
-          await glob(pat.trim(), { dot: true, ignore, cwd: options.cwd })
-        ).forEach((p) => fileSet.add(p));
-      }
+      let globResults = await Promise.all(
+        patterns.map((pat) =>
+          glob(pat.trim(), { dot: true, ignore, cwd: options.cwd }),
+        ),
+      );
+      globResults.flatMap((files) => files).forEach((p) => fileSet.add(p));
       let files = Array.from(fileSet);
       log.step(
         `list files matching ${patterns.join(", ")}: ${files.join(", ")}`,

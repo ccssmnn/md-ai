@@ -4,7 +4,8 @@
     "esModuleInterop": true,
     "skipLibCheck": true,
     "target": "es2022",
-    "allowJs": true,
+    "allowImportingTsExtensions": true,
+    "rewriteRelativeImportExtensions": true,
     "resolveJsonModule": true,
     "moduleDetection": "force",
     "isolatedModules": true,
@@ -15,7 +16,9 @@
     "module": "NodeNext",
     "sourceMap": true,
     "declaration": true,
-    "lib": ["es2022"],
+    "lib": [
+      "es2022"
+    ],
     "outDir": "lib"
   }
 }

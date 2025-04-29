@@ -2,6 +2,8 @@ import { spawn } from "child_process";
 import { z } from "zod";
 import { tool } from "ai";
 import { log } from "@clack/prompts";
+import { getIgnorePatterns } from "./_shared.js";
+import { glob } from "glob";
 
 export function createGrepSearchTool(options: { cwd: string }) {
   return tool({
@@ -15,33 +17,43 @@ export function createGrepSearchTool(options: { cwd: string }) {
         .describe("Glob patterns to include in search"),
     }),
     execute: async ({ query, patterns }) => {
-      let includeFlags = patterns.map((p) => `--include=${p}`);
       log.step(
         `searching for "${query}" in cwd ${options.cwd} with patterns: ${patterns.join(", ")}`,
       );
+
+      let ignore = await getIgnorePatterns(options.cwd);
+      let fileSet = new Set<string>();
+      let globResults = await Promise.all(
+        patterns.map((pat) =>
+          glob(pat.trim(), { dot: true, ignore, cwd: options.cwd }),
+        ),
+      );
+      globResults.flatMap((files) => files).forEach((p) => fileSet.add(p));
+      let fileList = Array.from(fileSet);
+
+      if (!fileList || fileList.length === 0) {
+        return { stdout: "No files found matching the patterns.", code: 0 };
+      }
+
       return new Promise<{ stdout: string; code: number }>((resolve) => {
-        let args = [
-          "-r",
-          "--color=never",
-          "-n",
-          "-H",
-          "-F",
-          ...includeFlags,
-          query,
-          ".",
-        ];
+        let args = ["-n", "-H", "-F", query, ...fileList];
         let proc = spawn("grep", args, { cwd: options.cwd });
         let stdout = "";
         proc.stdout.on("data", (data) => {
           stdout += data.toString();
         });
-        proc.stderr.on("data", () => {
-          // ignore stderr
+        let stderr = "";
+        proc.stderr.on("data", (data) => {
+          stderr += data.toString();
         });
-        proc.on("error", () => {
-          resolve({ stdout, code: -1 });
+        proc.on("error", (err) => {
+          console.error("grep error:", err);
+          resolve({ stdout: "", code: -1 });
         });
         proc.on("close", (code) => {
+          if (code !== 0) {
+            console.error("grep failed with code", code, ":", stderr);
+          }
           resolve({ stdout, code: code ?? 0 });
         });
       });

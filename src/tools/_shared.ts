@@ -21,7 +21,7 @@ export async function getIgnorePatterns(
         .filter((l) => l && !l.startsWith("#"))
         .map((p) => {
           if (p.endsWith("/")) return `${p}**`;
-          if (!p.includes("*") && !p.includes("?")) return `${p}/**`;
+          if (!p.includes("*") && !p.includes("?")) return p;
           return p;
         })
     : [];
