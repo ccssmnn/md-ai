@@ -17,49 +17,57 @@ import { shouldNeverHappen, tryCatch } from "../utils.js";
 
 export function createWriteFilesTool(options: { cwd: string }) {
   return tool({
-    description: `
-STRICT PATCH FORMAT:
-│
+    description: `STRICT PATCH FORMAT:
+
 You are given a task to produce one or more patch blocks for file modifications. You MUST strictly follow the PATCH FORMAT below. Respond with only the patch text—no explanations, no apologies, no markdown or code fences, and no extra content.
-│
+
 FORMAT SPECIFICATION:
-1) OUTPUT ONLY PATCH BLOCKS:
+
+1. OUTPUT ONLY PATCH BLOCKS:
    - Do NOT include any other text or commentary.
    - Do NOT wrap your output in markdown or any other delimiters.
-2) PATCH BLOCK STRUCTURE:
+2. PATCH BLOCK STRUCTURE:
    - Every patch must start with a patch type declaration line: '*** Add File:', '*** Delete File:', '*** Update File:', or '*** Move File:'.
    - 'Add File' patches require a '<<< ADD' section followed by the new file content and a '>>>' terminator.
    - 'Delete File' patches consist only of the declaration line.
-   - 'Update File' patches require a '<<< SEARCH' section with the exact lines to be replaced, a '===' separator, and a section with the replacement lines, followed by a '>>>' terminator.
+   - 'Update File' patches require a '<<< SEARCH' section containing the exact lines to be replaced, followed by a '===' separator, then the replacement lines, and finally the '>>>' terminator.
    - 'Move File' patches require a '<<< TO' section followed by the new path and a '>>>' terminator.
-   *** Add File: <relative/path/to/file>
-   <<< ADD
-   <new file content lines>
-   >>>
-   *** Delete File: <relative/path/to/file>
-   *** Update File: <relative/path/to/file>
-   <<< SEARCH
-   <exact existing lines to replace (including context)>
-   ===
-   <exact replacement lines>
-   >>>
-   *** Move File: <relative/path/to/file>
-   <<< TO
-   <relative/path/to/new/file>
-   >>>
-3) DELIMITERS AND WHITESPACE:
+
+Schema structure for each patch action:
+
+ *** Add File: <relative/path/to/file>
+ <<< ADD
+ <new file content lines>
+ >>>
+
+ *** Delete File: <relative/path/to/file>
+
+ *** Update File: <relative/path/to/file>
+ <<< SEARCH
+ <exact existing lines to replace (including context)>
+ ===
+ <exact replacement lines>
+ >>>
+
+ *** Move File: <relative/path/to/file>
+ <<< TO
+ <relative/path/to/new/file>
+ >>>
+
+3. DELIMITERS AND WHITESPACE:
    - Each delimiter (***, <<<, ===, >>>) must start at the beginning of its line.
    - Use UNIX newlines (\n) only.
    - Do NOT include trailing spaces.
-4) MULTIPLE PATCHES:
+4. MULTIPLE PATCHES:
    - Concatenate multiple patch blocks directly, one after another.
    - No blank lines between blocks, unless part of the file content.
    - Do not skip delimiters when concatenating patches.
-5) ERROR AVOIDANCE:
-   - Ensure that every '<<< ADD', '<<< SEARCH', and '<<< TO' block is properly terminated with a corresponding '>>>'.
+5. ERROR AVOIDANCE:
+   - the search section has a delimiter '===' to split the lines to replace from the lines to replace them with.
    - The search section in 'Update File' patches must contain the exact lines present in the original file.
+   - Ensure that every '<<< ADD', '<<< SEARCH', and '<<< TO' block is properly terminated with a corresponding '>>>'.
+
 EXAMPLE:
-"""
 *** Add File: src/new.txt
 <<< ADD
 Hello, world!
@@ -82,7 +90,6 @@ host: "0.0.0.0",
 <<< TO
 src/new_location/old.txt
 >>>
-"""
 
 Follow these rules exactly. Output begins immediately with the first *** line of the first patch block.
 `,

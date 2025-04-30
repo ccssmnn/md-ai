@@ -1,9 +1,10 @@
-import { spawn } from "child_process";
+import { spawn } from "node:child_process";
+
 import { z } from "zod";
 import { tool } from "ai";
 import { log } from "@clack/prompts";
-import { getIgnorePatterns } from "./_shared.js";
-import { glob } from "glob";
+
+import { globFiles } from "./_shared.js";
 
 export function createGrepSearchTool(options: { cwd: string }) {
   return tool({
@@ -21,15 +22,7 @@ export function createGrepSearchTool(options: { cwd: string }) {
         `searching for "${query}" in cwd ${options.cwd} with patterns: ${patterns.join(", ")}`,
       );
 
-      let ignore = await getIgnorePatterns(options.cwd);
-      let fileSet = new Set<string>();
-      let globResults = await Promise.all(
-        patterns.map((pat) =>
-          glob(pat.trim(), { dot: true, ignore, cwd: options.cwd }),
-        ),
-      );
-      globResults.flatMap((files) => files).forEach((p) => fileSet.add(p));
-      let fileList = Array.from(fileSet);
+      let fileList = await globFiles(patterns, options.cwd);
 
       if (!fileList || fileList.length === 0) {
         return { stdout: "No files found matching the patterns.", code: 0 };
