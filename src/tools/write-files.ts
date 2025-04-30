@@ -27,10 +27,11 @@ FORMAT SPECIFICATION:
    - Do NOT include any other text or commentary.
    - Do NOT wrap your output in markdown or any other delimiters.
 2) PATCH BLOCK STRUCTURE:
-   - Every patch must start with a patch type declaration line: '*** Add File:', '*** Delete File:', or '*** Update File:'.
+   - Every patch must start with a patch type declaration line: '*** Add File:', '*** Delete File:', '*** Update File:', or '*** Move File:'.
    - 'Add File' patches require a '<<< ADD' section followed by the new file content and a '>>>' terminator.
    - 'Delete File' patches consist only of the declaration line.
    - 'Update File' patches require a '<<< SEARCH' section with the exact lines to be replaced, a '===' separator, and a section with the replacement lines, followed by a '>>>' terminator.
+   - 'Move File' patches require a '<<< TO' section followed by the new path and a '>>>' terminator.
    *** Add File: <relative/path/to/file>
    <<< ADD
    <new file content lines>
@@ -42,6 +43,10 @@ FORMAT SPECIFICATION:
    ===
    <exact replacement lines>
    >>>
+   *** Move File: <relative/path/to/file>
+   <<< TO
+   <relative/path/to/new/file>
+   >>>
 3) DELIMITERS AND WHITESPACE:
    - Each delimiter (***, <<<, ===, >>>) must start at the beginning of its line.
    - Use UNIX newlines (\n) only.
@@ -51,7 +56,7 @@ FORMAT SPECIFICATION:
    - No blank lines between blocks, unless part of the file content.
    - Do not skip delimiters when concatenating patches.
 5) ERROR AVOIDANCE:
-   - Ensure that every '<<< ADD' and '<<< SEARCH' block is properly terminated with a corresponding '>>>'.
+   - Ensure that every '<<< ADD', '<<< SEARCH', and '<<< TO' block is properly terminated with a corresponding '>>>'.
    - The search section in 'Update File' patches must contain the exact lines present in the original file.
 EXAMPLE:
 """
@@ -73,6 +78,10 @@ host: "localhost",
 ===
 host: "0.0.0.0",
 >>>
+*** Move File: src/old.txt
+<<< TO
+src/new_location/old.txt
+>>>
 """
 
 Follow these rules exactly. Output begins immediately with the first *** line of the first patch block.
@@ -90,12 +99,19 @@ Follow these rules exactly. Output begins immediately with the first *** line of
       let patches = parsedPatchesResult.data;
       let patchOptions = patches.map(
         (patch, i): MultiSelectOptions<number>["options"][number] => {
-          if (patch.type === "delete")
+          if (patch.type === "delete") {
             return { value: i, label: `DELETE ${patch.path}` };
-          if (patch.type === "add")
+          }
+          if (patch.type === "add") {
             return { value: i, label: `ADD ${patch.path}` };
-          if (patch.type === "update")
+          }
+          if (patch.type === "update") {
             return { value: i, label: `UPDATE ${patch.path}` };
+          }
+          if (patch.type === "move") {
+            return { value: i, label: `MOVE ${patch.path} to ${patch.path}` };
+          }
+          patch satisfies never;
           shouldNeverHappen(`unexpected patch type ${JSON.stringify(patch)}`);
         },
       );
@@ -104,7 +120,6 @@ Follow these rules exactly. Output begins immediately with the first *** line of
       // so we log the patch string here and then prompt for confirmation
       log.info(patchString);
 
-      // AI: Implementing a two-step prompt for patch selection: first, choose between "all", "none", or "some"; then, if "some" is selected, choose specific patches.
       let firstResponse = await select({
         message: "Choose which patches to apply",
         options: [
@@ -113,6 +128,7 @@ Follow these rules exactly. Output begins immediately with the first *** line of
           { value: "some", label: "Some" },
         ],
       });
+
       if (isCancel(firstResponse)) throw Error("user has canceled");
 
       if (firstResponse === "none") {
@@ -317,7 +333,10 @@ export function parsePatchString(patchString: string): Array<FilePatch> {
     .split("\n")
     .filter((line) => line.startsWith("*** Move File:")).length;
 
-  if (addFileCount + updateFileCount + deleteFileCount + moveFileCount !== patches.length) {
+  if (
+    addFileCount + updateFileCount + deleteFileCount + moveFileCount !==
+    patches.length
+  ) {
     throw new Error(
       "The number of patch declarations does not match the number of parsed patches.",
     );
