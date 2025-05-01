@@ -3,10 +3,10 @@ import { appendFile, readFile, writeFile } from "node:fs/promises";
 import { streamText } from "ai";
 import type { CoreMessage } from "ai";
 
-import { markdownToMessages } from "#/markdown-parse.js";
-import { messagesToMarkdown } from "#/markdown-serialize.js";
+import { markdownToMessages } from "./markdown-parse.js";
+import { messagesToMarkdown } from "./markdown-serialize.js";
 import { confirm, log, spinner, stream } from "@clack/prompts";
-import { openInEditor } from "#/editor.js";
+import { openInEditor } from "./editor.js";
 
 type AISDKArgs = Omit<Parameters<typeof streamText>[0], "messages" | "prompt">;
 

@@ -3,7 +3,7 @@ import { strict as assert } from "node:assert";
 
 import type { CoreMessage } from "ai";
 
-import { messagesToMarkdown } from "#/markdown-serialize.js";
+import { messagesToMarkdown } from "./markdown-serialize.js";
 
 test("messagesToMarkdown", async (t) => {
   await t.test("with tool call and response", () => {

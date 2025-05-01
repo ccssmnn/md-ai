@@ -70,8 +70,5 @@
   "engines": {
     "node": ">=22"
   },
-  "packageManager": "pnpm@10.7.0",
-  "imports": {
-    "#/*": "./src/*"
-  }
+  "packageManager": "pnpm@10.7.0"
 }

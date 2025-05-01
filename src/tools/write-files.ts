@@ -1,19 +1,20 @@
-import { stat, readFile, unlink, writeFile } from "node:fs/promises";
+import {
+  stat,
+  readFile,
+  unlink,
+  writeFile,
+  mkdir,
+  rename,
+} from "node:fs/promises";
+import { dirname } from "node:path";
 
 import { z } from "zod";
 import { tool } from "ai";
+import { isCancel, log, multiselect, select } from "@clack/prompts";
+import type { MultiSelectOptions } from "@clack/prompts";
 
-import { ensureProjectPath } from "#/tools/_shared.js";
-import { mkdir, rename } from "fs/promises";
-import { dirname } from "path";
-import {
-  isCancel,
-  log,
-  multiselect,
-  select,
-  type MultiSelectOptions,
-} from "@clack/prompts";
-import { shouldNeverHappen, tryCatch } from "#/utils.js";
+import { ensureProjectPath } from "./_shared.js";
+import { shouldNeverHappen, tryCatch } from "../utils.js";
 
 export function createWriteFilesTool(options: { cwd: string }) {
   return tool({

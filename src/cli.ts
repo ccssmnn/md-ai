@@ -12,12 +12,12 @@ import { anthropic } from "@ai-sdk/anthropic";
 import { intro, log, outro } from "@clack/prompts";
 import { createProviderRegistry } from "ai";
 
-import { MarkdownAI, type MarkdownAIOptions } from "#/chat.js";
-import { tryCatch } from "#/utils.js";
-import { createReadFilesTool } from "#/tools/read-files.js";
-import { createListFilesTool } from "#/tools/list-files.js";
-import { createWriteFilesTool } from "#/tools/write-files.js";
-import { createGrepSearchTool } from "#/tools/grep-search.js";
+import { MarkdownAI, type MarkdownAIOptions } from "./chat.js";
+import { tryCatch } from "./utils.js";
+import { createReadFilesTool } from "./tools/read-files.js";
+import { createListFilesTool } from "./tools/list-files.js";
+import { createWriteFilesTool } from "./tools/write-files.js";
+import { createGrepSearchTool } from "./tools/grep-search.js";
 
 let registry = createProviderRegistry({ anthropic, openai, google });
 

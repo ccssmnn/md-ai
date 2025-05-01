@@ -1,7 +1,7 @@
 import assert from "node:assert";
 import test from "node:test";
 
-import { parsePatchString, applyPatchToString } from "#/tools/write-files.js";
+import { parsePatchString, applyPatchToString } from "./write-files.js";
 
 test("parsePatchString", async (t) => {
   await t.test("should parse an add patch", () => {

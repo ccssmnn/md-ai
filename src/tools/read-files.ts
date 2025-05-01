@@ -2,10 +2,10 @@ import { readFile } from "node:fs/promises";
 
 import { z } from "zod";
 import { tool } from "ai";
-
-import { tryCatch } from "#/utils.js";
-import { ensureProjectPath, globFiles } from "#/tools/_shared.js";
 import { log } from "@clack/prompts";
+
+import { tryCatch } from "../utils.js";
+import { ensureProjectPath, globFiles } from "./_shared.js";
 
 export function createReadFilesTool(options: { cwd: string }) {
   let { cwd } = options;

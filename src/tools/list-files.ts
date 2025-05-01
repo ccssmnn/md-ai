@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { tool } from "ai";
 
-import { globFiles } from "#/tools/_shared.js";
+import { globFiles } from "./_shared.js";
 import { log } from "@clack/prompts";
 
 export function createListFilesTool(options: { cwd: string }) {

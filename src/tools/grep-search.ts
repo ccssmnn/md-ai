@@ -4,7 +4,7 @@ import { z } from "zod";
 import { tool } from "ai";
 import { log } from "@clack/prompts";
 
-import { globFiles } from "#/tools/_shared.js";
+import { globFiles } from "./_shared.js";
 
 export function createGrepSearchTool(options: { cwd: string }) {
   return tool({

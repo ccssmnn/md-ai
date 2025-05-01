@@ -1,5 +1,5 @@
 import type { CoreAssistantMessage, ToolResultPart, CoreMessage } from "ai";
-import { shouldNeverHappen } from "#/utils.js";
+import { shouldNeverHappen } from "./utils.js";
 
 /**
  * Convert messages into markdown with compact JSON tool fences.

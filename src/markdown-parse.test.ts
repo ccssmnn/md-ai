@@ -3,7 +3,7 @@ import test from "node:test";
 
 import type { CoreMessage } from "ai";
 
-import { markdownToMessages } from "#/markdown-parse.js";
+import { markdownToMessages } from "./markdown-parse.js";
 
 test("markdownToMessages", async (t) => {
   await t.test("minimal example", () => {
