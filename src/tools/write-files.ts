@@ -1,58 +1,74 @@
-import { readFile, unlink, writeFile } from "node:fs/promises";
+import {
+  stat,
+  readFile,
+  unlink,
+  writeFile,
+  mkdir,
+  rename,
+} from "node:fs/promises";
+import { dirname } from "node:path";
 
 import { z } from "zod";
 import { tool } from "ai";
+import { isCancel, log, multiselect, select } from "@clack/prompts";
+import type { MultiSelectOptions } from "@clack/prompts";
 
 import { ensureProjectPath } from "./_shared.js";
-import {
-  isCancel,
-  log,
-  multiselect,
-  select,
-  type MultiSelectOptions,
-} from "@clack/prompts";
 import { shouldNeverHappen, tryCatch } from "../utils.js";
 
 export function createWriteFilesTool(options: { cwd: string }) {
   return tool({
-    description: `
-STRICT PATCH FORMAT:
-│
+    description: `STRICT PATCH FORMAT:
+
 You are given a task to produce one or more patch blocks for file modifications. You MUST strictly follow the PATCH FORMAT below. Respond with only the patch text—no explanations, no apologies, no markdown or code fences, and no extra content.
-│
+
 FORMAT SPECIFICATION:
-1) OUTPUT ONLY PATCH BLOCKS:
+
+1. OUTPUT ONLY PATCH BLOCKS:
    - Do NOT include any other text or commentary.
    - Do NOT wrap your output in markdown or any other delimiters.
-2) PATCH BLOCK STRUCTURE:
-   - Every patch must start with a patch type declaration line: '*** Add File:', '*** Delete File:', or '*** Update File:'.
+2. PATCH BLOCK STRUCTURE:
+   - Every patch must start with a patch type declaration line: '*** Add File:', '*** Delete File:', '*** Update File:', or '*** Move File:'.
    - 'Add File' patches require a '<<< ADD' section followed by the new file content and a '>>>' terminator.
    - 'Delete File' patches consist only of the declaration line.
-   - 'Update File' patches require a '<<< SEARCH' section with the exact lines to be replaced, a '===' separator, and a section with the replacement lines, followed by a '>>>' terminator.
-   *** Add File: <relative/path/to/file>
-   <<< ADD
-   <new file content lines>
-   >>>
-   *** Delete File: <relative/path/to/file>
-   *** Update File: <relative/path/to/file>
-   <<< SEARCH
-   <exact existing lines to replace (including context)>
-   ===
-   <exact replacement lines>
-   >>>
-3) DELIMITERS AND WHITESPACE:
+   - 'Update File' patches require a '<<< SEARCH' section containing the exact lines to be replaced, followed by a '===' separator, then the replacement lines, and finally the '>>>' terminator.
+   - 'Move File' patches require a '<<< TO' section followed by the new path and a '>>>' terminator.
+
+Schema structure for each patch action:
+
+ *** Add File: <relative/path/to/file>
+ <<< ADD
+ <new file content lines>
+ >>>
+
+ *** Delete File: <relative/path/to/file>
+
+ *** Update File: <relative/path/to/file>
+ <<< SEARCH
+ <exact existing lines to replace (including context)>
+ ===
+ <exact replacement lines>
+ >>>
+
+ *** Move File: <relative/path/to/file>
+ <<< TO
+ <relative/path/to/new/file>
+ >>>
+
+3. DELIMITERS AND WHITESPACE:
    - Each delimiter (***, <<<, ===, >>>) must start at the beginning of its line.
    - Use UNIX newlines (\n) only.
    - Do NOT include trailing spaces.
-4) MULTIPLE PATCHES:
+4. MULTIPLE PATCHES:
    - Concatenate multiple patch blocks directly, one after another.
    - No blank lines between blocks, unless part of the file content.
    - Do not skip delimiters when concatenating patches.
-5) ERROR AVOIDANCE:
-   - Ensure that every '<<< ADD' and '<<< SEARCH' block is properly terminated with a corresponding '>>>'.
+5. ERROR AVOIDANCE:
+   - the search section has a delimiter '===' to split the lines to replace from the lines to replace them with.
    - The search section in 'Update File' patches must contain the exact lines present in the original file.
+   - Ensure that every '<<< ADD', '<<< SEARCH', and '<<< TO' block is properly terminated with a corresponding '>>>'.
+
 EXAMPLE:
-"""
 *** Add File: src/new.txt
 <<< ADD
 Hello, world!
@@ -71,7 +87,10 @@ host: "localhost",
 ===
 host: "0.0.0.0",
 >>>
-"""
+*** Move File: src/old.txt
+<<< TO
+src/new_location/old.txt
+>>>
 
 Follow these rules exactly. Output begins immediately with the first *** line of the first patch block.
 `,
@@ -88,12 +107,19 @@ Follow these rules exactly. Output begins immediately with the first *** line of
       let patches = parsedPatchesResult.data;
       let patchOptions = patches.map(
         (patch, i): MultiSelectOptions<number>["options"][number] => {
-          if (patch.type === "delete")
+          if (patch.type === "delete") {
             return { value: i, label: `DELETE ${patch.path}` };
-          if (patch.type === "add")
+          }
+          if (patch.type === "add") {
             return { value: i, label: `ADD ${patch.path}` };
-          if (patch.type === "update")
+          }
+          if (patch.type === "update") {
             return { value: i, label: `UPDATE ${patch.path}` };
+          }
+          if (patch.type === "move") {
+            return { value: i, label: `MOVE ${patch.path} to ${patch.path}` };
+          }
+          patch satisfies never;
           shouldNeverHappen(`unexpected patch type ${JSON.stringify(patch)}`);
         },
       );
@@ -102,7 +128,6 @@ Follow these rules exactly. Output begins immediately with the first *** line of
       // so we log the patch string here and then prompt for confirmation
       log.info(patchString);
 
-      // AI: Implementing a two-step prompt for patch selection: first, choose between "all", "none", or "some"; then, if "some" is selected, choose specific patches.
       let firstResponse = await select({
         message: "Choose which patches to apply",
         options: [
@@ -111,6 +136,7 @@ Follow these rules exactly. Output begins immediately with the first *** line of
           { value: "some", label: "Some" },
         ],
       });
+
       if (isCancel(firstResponse)) throw Error("user has canceled");
 
       if (firstResponse === "none") {
@@ -140,14 +166,34 @@ Follow these rules exactly. Output begins immediately with the first *** line of
       for (let patch of patches) {
         if (patch.type === "add") {
           let projectPath = ensureProjectPath(cwd, patch.path);
-          await writeFile(projectPath, patch.content, { encoding: "utf-8" });
-          results.push({ ok: true, path: patch.path, status: "add" });
-          continue;
+          let fileExists = await tryCatch(stat(projectPath));
+          if (fileExists.ok) {
+            results.push({
+              ok: false,
+              path: patch.path,
+              status: "add-failed",
+              reason: "file already exists",
+            });
+            continue;
+          } else {
+            await writeFile(projectPath, patch.content, { encoding: "utf-8" });
+            results.push({ ok: true, path: patch.path, status: "add" });
+            continue;
+          }
         }
         if (patch.type === "delete") {
           let projectPath = ensureProjectPath(cwd, patch.path);
           await unlink(projectPath);
           results.push({ ok: true, path: patch.path, status: "delete" });
+          continue;
+        }
+        if (patch.type === "move") {
+          let projectPathFrom = ensureProjectPath(cwd, patch.path);
+          let projectPathTo = ensureProjectPath(cwd, patch.to);
+          let dir = dirname(projectPathTo);
+          await mkdir(dir, { recursive: true });
+          await rename(projectPathFrom, projectPathTo);
+          results.push({ ok: true, path: patch.path, status: "move" });
           continue;
         }
         if (patch.type === "update") {
@@ -200,6 +246,11 @@ type FilePatch =
       path: string;
       search: string;
       replace: string;
+    }
+  | {
+      type: "move";
+      path: string;
+      to: string;
     };
 
 /**
@@ -234,6 +285,26 @@ export function parsePatchString(patchString: string): Array<FilePatch> {
     } else if (line.startsWith("*** Delete File:")) {
       let path = line.substring("*** Delete File:".length).trim();
       patches.push({ type: "delete", path: path });
+      i++;
+    } else if (line.startsWith("*** Move File:")) {
+      let path = line.substring("*** Move File:".length).trim();
+      i++;
+      if (i >= lines.length || lines[i]?.trim() !== "<<< TO") {
+        i++; // consume the line
+        continue;
+      }
+      i++;
+      let toLines: string[] = [];
+      while (i < lines.length && lines[i]?.trim() !== ">>>") {
+        toLines.push(lines[i] ?? "");
+        i++;
+      }
+      let to = toLines.join("\n");
+      patches.push({
+        type: "move",
+        path: path,
+        to: to,
+      });
       i++;
     } else if (line.startsWith("*** Update File:")) {
       let path = line.substring("*** Update File:".length).trim();
@@ -277,8 +348,14 @@ export function parsePatchString(patchString: string): Array<FilePatch> {
   let deleteFileCount = patchString
     .split("\n")
     .filter((line) => line.startsWith("*** Delete File:")).length;
+  let moveFileCount = patchString
+    .split("\n")
+    .filter((line) => line.startsWith("*** Move File:")).length;
 
-  if (addFileCount + updateFileCount + deleteFileCount !== patches.length) {
+  if (
+    addFileCount + updateFileCount + deleteFileCount + moveFileCount !==
+    patches.length
+  ) {
     throw new Error(
       "The number of patch declarations does not match the number of parsed patches.",
     );

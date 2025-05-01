@@ -2,11 +2,10 @@ import { readFile } from "node:fs/promises";
 
 import { z } from "zod";
 import { tool } from "ai";
-import { glob } from "glob";
+import { log } from "@clack/prompts";
 
 import { tryCatch } from "../utils.js";
-import { ensureProjectPath, getIgnorePatterns } from "./_shared.js";
-import { log } from "@clack/prompts";
+import { ensureProjectPath, globFiles } from "./_shared.js";
 
 export function createReadFilesTool(options: { cwd: string }) {
   let { cwd } = options;
@@ -17,14 +16,7 @@ export function createReadFilesTool(options: { cwd: string }) {
       patterns: z.array(z.string()).describe("glob patterns for files to open"),
     }),
     execute: async ({ patterns }) => {
-      let ignore = await getIgnorePatterns(cwd);
-      let matched = new Set<string>();
-      for (let pat of patterns) {
-        (await glob(pat.trim(), { dot: true, ignore, cwd })).forEach((p) =>
-          matched.add(p),
-        );
-      }
-      let files = Array.from(matched);
+      let files = await globFiles(patterns, cwd);
       if (files.length === 0)
         return { ok: false, error: "No files match that pattern", patterns };
 

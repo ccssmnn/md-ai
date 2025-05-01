@@ -17,6 +17,7 @@ import { tryCatch } from "./utils.js";
 import { createReadFilesTool } from "./tools/read-files.js";
 import { createListFilesTool } from "./tools/list-files.js";
 import { createWriteFilesTool } from "./tools/write-files.js";
+import { createGrepSearchTool } from "./tools/grep-search.js";
 
 let registry = createProviderRegistry({ anthropic, openai, google });
 
@@ -57,11 +58,6 @@ if (!chatFile) {
   fatal("Missing required <chatFile> argument");
 }
 
-// Resolve paths
-let resolvedChatPath = resolve(chatFile);
-let cwd = resolve(opts.cwd);
-
-// Read system prompt
 let system: string | undefined;
 if (opts.system) {
   let systemRes = await tryCatch(readFile(opts.system, "utf-8"));
@@ -71,14 +67,13 @@ if (opts.system) {
   system = systemRes.data;
 }
 
-// Instantiate model
 let modelRes = tryCatch(() => registry.languageModel(opts.model));
 if (!modelRes.ok) {
   fatal(modelRes.error.message);
 }
 let model = modelRes.data;
 
-// Ensure chat file exists
+let resolvedChatPath = resolve(chatFile);
 if (!existsSync(resolvedChatPath)) {
   let writeRes = await tryCatch(
     writeFile(resolvedChatPath, "", { encoding: "utf-8" }),
@@ -88,12 +83,13 @@ if (!existsSync(resolvedChatPath)) {
   }
 }
 
-// Build tools object only if not disabled
+let cwd = resolve(opts.cwd);
 let toolsOption = opts.tools
   ? {
       listFiles: createListFilesTool({ cwd }),
       readFiles: createReadFilesTool({ cwd }),
       writeFiles: createWriteFilesTool({ cwd }),
+      grepSearch: createGrepSearchTool({ cwd }),
     }
   : undefined;
 
@@ -104,9 +100,12 @@ let options: MarkdownAIOptions = {
     model,
     system,
     maxSteps: opts.maxSteps,
-    ...(toolsOption ? { tools: toolsOption } : {}),
   },
 };
+
+if (toolsOption) {
+  options.ai.tools = toolsOption;
+}
 
 let chat = new MarkdownAI(options);
 

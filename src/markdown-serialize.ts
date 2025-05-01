@@ -7,7 +7,7 @@ import { shouldNeverHappen } from "./utils.js";
 export function messagesToMarkdown(messages: Array<CoreMessage>): string {
   let md = "";
 
-  for (const msg of messages) {
+  for (let msg of messages) {
     md += `## ${msg.role}\n\n`;
 
     if (msg.role === "system") {
@@ -55,16 +55,16 @@ function serializeAssistantParts(
   parts: Exclude<CoreAssistantMessage["content"], string>,
 ): string {
   let out = "";
-  for (const p of parts) {
+  for (let p of parts) {
     if (p.type === "text") {
       out += p.text;
     } else if (p.type === "tool-call") {
-      const payload = {
+      let payload = {
         toolCallId: p.toolCallId,
         toolName: p.toolName,
         args: p.args,
       };
-      const json = JSON.stringify(payload);
+      let json = JSON.stringify(payload);
       out += `\n${fence("tool-call", json)}`;
     } else {
       shouldNeverHappen(`unsupported part type ${p.type}`);
@@ -75,13 +75,13 @@ function serializeAssistantParts(
 
 function serializeToolResultParts(parts: Array<ToolResultPart>): string {
   let out = "";
-  for (const p of parts) {
-    const payload = {
+  for (let p of parts) {
+    let payload = {
       toolCallId: p.toolCallId,
       toolName: p.toolName,
       result: p.result,
     };
-    const json = JSON.stringify(payload);
+    let json = JSON.stringify(payload);
     out += `\n${fence("tool-result", json)}`;
   }
   return out;

@@ -134,23 +134,22 @@ md-ai chat.md --model openai:gpt-4 --cwd ./src
 Options:
 
 - -s, --system <path> Path to a file containing a system prompt.
-- --no-tools Disable file tools (pure chat mode)
 - -m, --model <provider:model> Provider and model to use (default: google:gemini-2.0-flash).
 - --max-steps <number> Maximum number of tool-calling steps (default: 10).
 - -e, --editor <cmd> Editor command (default: $EDITOR or 'vi +99999').
 - -c, --cwd <path> Working directory for file tools (default: current working directory).
-- --no-tools Disable file tools (pure chat mode)
+- --no-tools Disable file tools (list, read, write, grep) (pure chat mode)
 
 ## Library Usage
 
 The package can also be used as a library in your own script.
-By using `MarkdownAI` this way, you can provide your own tools and model:
+By using `MarkdownAI` this way, you can provide custom tools and model:
 
 ```javascript
 import { google } from "@ai-sdk/google";
 import { MarkdownAI, tools } from "md-ai";
 
-const chat = new MarkdownAI({
+let chat = new MarkdownAI({
   path: "./my-chat.md",
   editor: "code --wait",
   ai: {
@@ -159,9 +158,10 @@ const chat = new MarkdownAI({
     system: "You are a helpful assistant.",
     maxSteps: 5,
     tools: {
-      readFiles: tools.createReadFilesTool(),
-      listFiles: tools.createListFilesTool(),
-      writeFiles: tools.createWriteFilesTool(),
+      readFiles: tools.createReadFilesTool({ cwd: "./" }),
+      listFiles: tools.createListFilesTool({ cwd: "./" }),
+      writeFiles: tools.createWriteFilesTool({ cwd: "./" }),
+      grepSearch: tools.createGrepSearchTool({ cwd: "./" }),
       // your custom tools
     },
   },

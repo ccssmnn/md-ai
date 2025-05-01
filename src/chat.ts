@@ -6,7 +6,7 @@ import type { CoreMessage } from "ai";
 import { markdownToMessages } from "./markdown-parse.js";
 import { messagesToMarkdown } from "./markdown-serialize.js";
 import { confirm, log, spinner, stream } from "@clack/prompts";
-import { openInEditor } from "./prompts.js";
+import { openInEditor } from "./editor.js";
 
 type AISDKArgs = Omit<Parameters<typeof streamText>[0], "messages" | "prompt">;
 
@@ -69,7 +69,7 @@ export class MarkdownAI {
     if (addHeading) {
       await appendFile(this.chatPath, "\n## user\n");
     }
-    const shouldOpenEditor = await confirm({
+    let shouldOpenEditor = await confirm({
       message: "Open Editor to enter user message?",
       initialValue: true,
     });
@@ -91,7 +91,7 @@ export class MarkdownAI {
     };
 
     // show spinner while waiting for model to start streaming
-    const spin = spinner();
+    let spin = spinner();
     spin.start("Thinking...");
     let { textStream, response } = streamText({
       ...requestOptions,
@@ -99,9 +99,9 @@ export class MarkdownAI {
     });
 
     // stop spinner on first token and forward all chunks
-    const interceptedStream = (async function* () {
+    let interceptedStream = (async function* () {
       let first = true;
-      for await (const chunk of textStream) {
+      for await (let chunk of textStream) {
         if (first) {
           spin.stop();
           first = false;

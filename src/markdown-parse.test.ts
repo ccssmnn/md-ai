@@ -1,7 +1,10 @@
 import assert from "node:assert";
 import test from "node:test";
-import { markdownToMessages } from "./markdown-parse.js";
+
 import type { CoreMessage } from "ai";
+
+import { markdownToMessages } from "./markdown-parse.js";
+
 test("markdownToMessages", async (t) => {
   await t.test("minimal example", () => {
     let markdown = `
@@ -101,7 +104,7 @@ will do!
   });
 
   await t.test("tool-result with nested markdown", () => {
-    const markdown = `
+    let markdown = `
 ## assistant
 
 \`\`\`tool-call
@@ -129,8 +132,8 @@ will do!
 Finished reviewing.
 `;
 
-    const messages = markdownToMessages(markdown);
-    const expected: CoreMessage[] = [
+    let messages = markdownToMessages(markdown);
+    let expected: CoreMessage[] = [
       {
         role: "assistant",
         content: [
@@ -166,7 +169,7 @@ Finished reviewing.
   });
 
   await t.test("case-insensitive roles with valid tool-call", () => {
-    const md = `
+    let md = `
 ## User
 
 Hello user!
@@ -183,7 +186,7 @@ Hello user!
 {"toolCallId":"123","toolName":"foo","result":{"ok":true}}
 \`\`\`
 `;
-    const msgs = markdownToMessages(md);
+    let msgs = markdownToMessages(md);
     assert.deepEqual(msgs, [
       { role: "user", content: "Hello user!" },
       {
@@ -212,7 +215,7 @@ Hello user!
   });
 
   await t.test("reject tool-call in user role", () => {
-    const md = `
+    let md = `
 ## User
 
 \`\`\`tool-call
@@ -225,7 +228,7 @@ Hello user!
   });
 
   await t.test("reject tool-result in assistant role", () => {
-    const md = `
+    let md = `
 ## assistant
 
 \`\`\`tool-result
@@ -238,7 +241,7 @@ Hello user!
   });
 
   await t.test("reject malformed tool-call JSON", () => {
-    const md = `
+    let md = `
 ## assistant
 
 \`\`\`tool-call
@@ -249,7 +252,7 @@ Hello user!
   });
 
   await t.test("reject tool-call schema mismatch", () => {
-    const md = `
+    let md = `
 ## assistant
 
 \`\`\`tool-call
@@ -260,7 +263,7 @@ Hello user!
   });
 
   await t.test("reject malformed tool-result JSON", () => {
-    const md = `
+    let md = `
 ## tool
 
 \`\`\`tool-result
@@ -271,7 +274,7 @@ Hello user!
   });
 
   await t.test("reject tool-result schema mismatch", () => {
-    const md = `
+    let md = `
 ## tool
 
 \`\`\`tool-result

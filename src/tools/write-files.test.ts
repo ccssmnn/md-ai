@@ -79,6 +79,18 @@ new content
       },
     ]);
   });
+
+  await t.test("should parse a move patch", () => {
+    let patchString = `*** Move File: src/oldFile.txt\n<<< TO\nsrc/newFile.txt\n>>>`;
+    let patches = parsePatchString(patchString);
+    assert.deepStrictEqual(patches, [
+      {
+        type: "move",
+        path: "src/oldFile.txt",
+        to: "src/newFile.txt",
+      },
+    ]);
+  });
 });
 
 test("applyPatchToString", async (t) => {
