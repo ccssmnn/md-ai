@@ -1,4 +1,4 @@
-import { readFile, unlink, writeFile } from "node:fs/promises";
+import { stat, readFile, unlink, writeFile } from "node:fs/promises";
 
 import { z } from "zod";
 import { tool } from "ai";
@@ -165,9 +165,20 @@ Follow these rules exactly. Output begins immediately with the first *** line of
       for (let patch of patches) {
         if (patch.type === "add") {
           let projectPath = ensureProjectPath(cwd, patch.path);
-          await writeFile(projectPath, patch.content, { encoding: "utf-8" });
-          results.push({ ok: true, path: patch.path, status: "add" });
-          continue;
+          let fileExists = await tryCatch(stat(projectPath));
+          if (fileExists.ok) {
+            results.push({
+              ok: false,
+              path: patch.path,
+              status: "add-failed",
+              reason: "file already exists",
+            });
+            continue;
+          } else {
+            await writeFile(projectPath, patch.content, { encoding: "utf-8" });
+            results.push({ ok: true, path: patch.path, status: "add" });
+            continue;
+          }
         }
         if (patch.type === "delete") {
           let projectPath = ensureProjectPath(cwd, patch.path);
