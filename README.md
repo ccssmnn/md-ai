@@ -158,10 +158,10 @@ let chat = new MarkdownAI({
     system: "You are a helpful assistant.",
     maxSteps: 5,
     tools: {
-      readFiles: tools.createReadFilesTool({ cwd: './' }),
-      listFiles: tools.createListFilesTool({ cwd: './' }),
-      writeFiles: tools.createWriteFilesTool({ cwd: './' }),
-      grepSearch: tools.createGrepSearchTool({ cwd: './' }),
+      readFiles: tools.createReadFilesTool({ cwd: "./" }),
+      listFiles: tools.createListFilesTool({ cwd: "./" }),
+      writeFiles: tools.createWriteFilesTool({ cwd: "./" }),
+      grepSearch: tools.createGrepSearchTool({ cwd: "./" }),
       // your custom tools
     },
   },

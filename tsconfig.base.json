@@ -14,14 +14,10 @@
     "module": "NodeNext",
     "sourceMap": true,
     "declaration": true,
-    "lib": [
-      "es2022"
-    ],
+    "lib": ["es2022"],
     "outDir": "lib",
     "paths": {
-      "#/*": [
-        "./src/*"
-      ]
+      "#/*": ["./src/*"]
     }
   }
 }
