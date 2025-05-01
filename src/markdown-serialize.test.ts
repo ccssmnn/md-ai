@@ -1,11 +1,13 @@
 import { test } from "node:test";
 import { strict as assert } from "node:assert";
-import { messagesToMarkdown } from "./markdown-serialize.js";
+
 import type { CoreMessage } from "ai";
+
+import { messagesToMarkdown } from "#/markdown-serialize.js";
 
 test("messagesToMarkdown", async (t) => {
   await t.test("with tool call and response", () => {
-    const messages: CoreMessage[] = [
+    let messages: CoreMessage[] = [
       { role: "user", content: "call the tool for me" },
       {
         role: "assistant",
@@ -32,9 +34,9 @@ test("messagesToMarkdown", async (t) => {
       },
     ];
 
-    const markdown = messagesToMarkdown(messages);
+    let markdown = messagesToMarkdown(messages);
 
-    const expected = `## user
+    let expected = `## user
 
 call the tool for me
 

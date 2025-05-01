@@ -24,6 +24,7 @@
     "vscode"
   ],
   "files": [
+    "src",
     "lib",
     "README.md",
     "LICENSE"
@@ -33,12 +34,12 @@
   "scripts": {
     "prepublishOnly": "pnpm run ci",
     "prepare": "pnpm run build",
-    "build": "tsc",
+    "build": "tsc -p tsconfig.build.json",
     "format": "prettier --write .",
-    "check-types": "tsc --noEmit",
+    "check-types": "tsc --noEmit -p tsconfig.json",
     "check-exports": "attw --pack . --ignore-rules=cjs-resolves-to-esm",
     "check-format": "prettier --check .",
-    "check-tests": "node --test lib/*.test.js lib/**/*.test.js",
+    "check-tests": "tsx --test src/**/*.test.ts",
     "ci": "pnpm build && pnpm check-tests && pnpm check-format && pnpm check-exports"
   },
   "bin": {
@@ -69,5 +70,8 @@
   "engines": {
     "node": ">=22"
   },
-  "packageManager": "pnpm@10.7.0"
+  "packageManager": "pnpm@10.7.0",
+  "imports": {
+    "#/*": "./src/*"
+  }
 }

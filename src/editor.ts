@@ -1,25 +1,26 @@
 import { spawn } from "node:child_process";
 import { stdin } from "node:process";
 
-import { shouldNeverHappen } from "./utils.js";
+import { shouldNeverHappen } from "#/utils.js";
 
 /**
  * Launch an external editor and wait for it to exit.
  * Ensures raw‐mode is disabled while the editor runs.
+ * Works for editors like vscode or vim
  */
 export async function openInEditor(
   editor: string,
   path: string,
   ...args: string[]
 ): Promise<void> {
-  const wasRaw = stdin.isTTY && stdin.isRaw;
+  let wasRaw = stdin.isTTY && stdin.isRaw;
   if (wasRaw) stdin.setRawMode(false);
 
-  const [cmd, ...editorArgs] = editor.split(" ");
+  let [cmd, ...editorArgs] = editor.split(" ");
   if (!cmd) return shouldNeverHappen("Invalid editor command");
 
   return new Promise((resolve, reject) => {
-    const proc = spawn(cmd, [...editorArgs, ...args, path], {
+    let proc = spawn(cmd, [...editorArgs, ...args, path], {
       stdio: "inherit",
       shell: false,
     });

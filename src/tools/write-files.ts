@@ -3,7 +3,7 @@ import { stat, readFile, unlink, writeFile } from "node:fs/promises";
 import { z } from "zod";
 import { tool } from "ai";
 
-import { ensureProjectPath } from "./_shared.js";
+import { ensureProjectPath } from "#/tools/_shared.js";
 import { mkdir, rename } from "fs/promises";
 import { dirname } from "path";
 import {
@@ -13,7 +13,7 @@ import {
   select,
   type MultiSelectOptions,
 } from "@clack/prompts";
-import { shouldNeverHappen, tryCatch } from "../utils.js";
+import { shouldNeverHappen, tryCatch } from "#/utils.js";
 
 export function createWriteFilesTool(options: { cwd: string }) {
   return tool({
@@ -189,7 +189,7 @@ Follow these rules exactly. Output begins immediately with the first *** line of
         if (patch.type === "move") {
           let projectPathFrom = ensureProjectPath(cwd, patch.path);
           let projectPathTo = ensureProjectPath(cwd, patch.to);
-          const dir = dirname(projectPathTo);
+          let dir = dirname(projectPathTo);
           await mkdir(dir, { recursive: true });
           await rename(projectPathFrom, projectPathTo);
           results.push({ ok: true, path: patch.path, status: "move" });

@@ -4,6 +4,9 @@
     "src/**/*.ts"
   ],
   "exclude": [
-    "lib"
+    "test",
+    "__tests__",
+    "lib",
+    "**/*.test.ts"
   ]
 }
