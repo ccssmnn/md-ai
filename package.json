@@ -1,6 +1,6 @@
 {
   "name": "@ccssmnn/md-ai",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "author": "Carl Assmann <assmann@hey.com> (https://carlassmann.com)",
   "description": "AI conversations and agentic coding in markdown with your preferred editor",
   "url": "https://github.com/ccssmnn/md-ai",
@@ -39,7 +39,7 @@
     "check-types": "tsc --noEmit -p tsconfig.json",
     "check-exports": "attw --pack . --ignore-rules=cjs-resolves-to-esm",
     "check-format": "prettier --check .",
-    "check-tests": "tsx --test src/**/*.test.ts",
+    "check-tests": "tsx --test src/*.test.ts src/**/*.test.ts",
     "ci": "pnpm build && pnpm check-tests && pnpm check-format && pnpm check-exports"
   },
   "bin": {
