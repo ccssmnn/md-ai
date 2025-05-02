@@ -1,7 +1,7 @@
 on:
   push:
     tags:
-      - 'v*.*.*'
+      - "v*.*.*"
   workflow_dispatch:
 
 jobs:
@@ -12,8 +12,8 @@ jobs:
 
       - uses: actions/setup-node@v3
         with:
-          node-version: '22.x'
-          cache: 'pnpm'
+          node-version: "22.x"
+          cache: "pnpm"
 
       - uses: pnpm/action-setup@v2
         with:

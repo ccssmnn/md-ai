@@ -84,10 +84,15 @@ export class MarkdownAI {
    * @returns A promise that resolves to true if the model generated a response, false otherwise.
    */
   private async aiturn(messages: CoreMessage[]): Promise<boolean> {
+    let msgs = [...messages];
+    if (this.ai.system) {
+      msgs.unshift({ role: "system", content: this.ai.system });
+    }
+
     let requestOptions = {
       ...this.ai,
-      system: `${systemPrompt}\n${this.ai.system ?? ""}`,
-      messages,
+      system: systemPrompt,
+      messages: msgs,
     };
 
     // show spinner while waiting for model to start streaming
