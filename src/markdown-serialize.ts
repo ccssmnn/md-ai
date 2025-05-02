@@ -1,4 +1,10 @@
-import type { CoreAssistantMessage, ToolResultPart, CoreMessage } from "ai";
+import type {
+  CoreAssistantMessage,
+  ToolResultPart,
+  CoreMessage,
+  CoreUserMessage,
+} from "ai";
+
 import { shouldNeverHappen } from "./utils.js";
 
 /**
@@ -11,32 +17,17 @@ export function messagesToMarkdown(messages: Array<CoreMessage>): string {
     md += `## ${msg.role}\n\n`;
 
     if (msg.role === "system") {
-      md += `${msg.content}\n\n`;
+      md += msg.content + "\n\n";
       continue;
     }
 
     if (msg.role === "user") {
-      if (typeof msg.content === "string") {
-        md += `${msg.content}\n\n`;
-      } else {
-        for (let part of msg.content) {
-          if (part.type !== "text") {
-            shouldNeverHappen(
-              `file and image parts of the user message cannot be serialized yet. got message: ${JSON.stringify(msg)}`,
-            );
-          }
-          md += `${part.text}\n\n`;
-        }
-      }
+      md += serializeUserParts(msg.content) + "\n\n";
       continue;
     }
 
     if (msg.role === "assistant") {
-      if (typeof msg.content === "string") {
-        md += msg.content;
-      } else {
-        md += serializeAssistantParts(msg.content) + "\n\n";
-      }
+      md += serializeAssistantParts(msg.content) + "\n\n";
       continue;
     }
 
@@ -45,17 +36,41 @@ export function messagesToMarkdown(messages: Array<CoreMessage>): string {
       continue;
     }
 
+    msg satisfies never;
     shouldNeverHappen(`unexpected message: ${msg}`);
   }
 
   return md.trimEnd() + "\n";
 }
 
-function serializeAssistantParts(
-  parts: Exclude<CoreAssistantMessage["content"], string>,
-): string {
+function serializeUserParts(parts: CoreUserMessage["content"]) {
+  if (typeof parts === "string") {
+    return parts;
+  }
   let out = "";
-  for (let p of parts) {
+
+  parts.forEach((p, i) => {
+    if (p.type === "text") {
+      out += p.text;
+    } else {
+      shouldNeverHappen(`unsupported user message content part type ${p.type}`);
+    }
+    // Add a blank line after each part except the last one.
+    if (i < parts.length - 1) {
+      out += "\n\n";
+    }
+  });
+  return out;
+}
+
+function serializeAssistantParts(
+  parts: CoreAssistantMessage["content"],
+): string {
+  if (typeof parts === "string") {
+    return parts;
+  }
+  let out = "";
+  parts.forEach((p, i) => {
     if (p.type === "text") {
       out += p.text;
     } else if (p.type === "tool-call") {
@@ -65,11 +80,17 @@ function serializeAssistantParts(
         args: p.args,
       };
       let json = JSON.stringify(payload);
-      out += `\n${fence("tool-call", json)}`;
+      out += fence("tool-call", json);
     } else {
-      shouldNeverHappen(`unsupported part type ${p.type}`);
+      shouldNeverHappen(
+        `unsupported assistent message content part type ${p.type}`,
+      );
     }
-  }
+    // Add a blank line after each part except the last one.
+    if (i < parts.length - 1) {
+      out += "\n\n";
+    }
+  });
   return out;
 }
 
@@ -82,11 +103,15 @@ function serializeToolResultParts(parts: Array<ToolResultPart>): string {
       result: p.result,
     };
     let json = JSON.stringify(payload);
-    out += `\n${fence("tool-result", json)}`;
+    out += fence("tool-result", json);
   }
   return out;
 }
 
 function fence(name: string, content: string): string {
-  return `\`\`\`${name}\n${content}\n\`\`\``;
+  return `
+${"```"}${name}
+${content}
+${"```"}
+`;
 }
