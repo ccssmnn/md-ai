@@ -16,7 +16,7 @@ import type { MultiSelectOptions } from "@clack/prompts";
 import { ensureProjectPath } from "./_shared.js";
 import { shouldNeverHappen, tryCatch } from "../utils.js";
 
-const filePatchSchema = z.union([
+let filePatchSchema = z.union([
   z.object({
     type: z.literal("add"),
     path: z.string(),
@@ -37,9 +37,16 @@ const filePatchSchema = z.union([
     path: z.string(),
     to: z.string(),
   }),
+  z.object({
+    type: z.literal("replace"),
+    path: z.string(),
+    content: z.string(),
+  }),
 ]);
 
-const writeFilesParameters = z.object({
+type FilePatch = z.infer<typeof filePatchSchema>;
+
+let writeFilesParameters = z.object({
   patches: z.array(filePatchSchema),
 });
 
@@ -55,12 +62,14 @@ The input should be a JSON array where each element is an object representing a 
      "path": "<relative/path/to/file>",
      "content": "<new file content>"
    }
+   Creates a new file. Fails if the file already exists.
 
 2. Delete File:
    {
      "type": "delete",
      "path": "<relative/path/to/file>"
    }
+   Deletes an existing file. Fails if the file does not exist.
 
 3. Update File:
    {
@@ -69,8 +78,9 @@ The input should be a JSON array where each element is an object representing a 
      "search": "<existing lines to replace>",
      "replace": "<replacement lines>"
    }
-
+   Modifies an existing file by replacing occurrences of 'search' content with 'replace' content. Fails if the file does not exist or if the 'search' pattern is not found.
    Note: The tool ignores leading/trailing whitespace and indentation when matching the 'search' pattern. It will replace *all* occurrences of the matched pattern globally within the file. To update only a specific occurrence, include enough surrounding lines in the 'search' parameter to make that specific occurrence unique.
+   Fails if the search string did not match any lines in the file.
 
 4. Move File:
    {
@@ -78,6 +88,16 @@ The input should be a JSON array where each element is an object representing a 
      "path": "<relative/path/from>",
      "to": "<relative/path/to>"
    }
+   Moves a file from one location to another. Fails if the file does not exist.
+
+5. Replace File:
+   {
+     "type": "replace",
+     "path": "<relative/path/to/file>",
+     "content": "<new file content>"
+   }
+   Replaces the entire content of an existing file. Fails if the file does not exist.
+   Note: For large file modifications, using the 'replace' type is generally more efficient and reliable than using multiple or a single large 'update' patch.
 
 The tool will present the proposed changes to the user for confirmation before applying them.
 `,
@@ -109,6 +129,13 @@ The tool will present the proposed changes to the user for confirmation before a
                   p.search,
                   "===",
                   p.replace,
+                  ">>>",
+                ].join("\n");
+              case "replace":
+                return [
+                  `*** Replace File: ${p.path}`,
+                  "<<< REPLACE WITH",
+                  p.content,
                   ">>>",
                 ].join("\n");
               default:
@@ -154,6 +181,9 @@ The tool will present the proposed changes to the user for confirmation before a
             if (patch.type === "move") {
               return { value: i, label: `MOVE ${patch.path} to ${patch.to}` };
             }
+            if (patch.type === "replace") {
+              return { value: i, label: `REPLACE ${patch.path}` };
+            }
             patch satisfies never;
             shouldNeverHappen(`unexpected patch type ${JSON.stringify(patch)}`);
           },
@@ -176,8 +206,13 @@ The tool will present the proposed changes to the user for confirmation before a
       for (let patch of patches) {
         if (patch.type === "add") {
           let projectPath = ensureProjectPath(cwd, patch.path);
-          let fileExists = await tryCatch(stat(projectPath));
-          if (fileExists.ok) {
+          let writeRes = await tryCatch(
+            writeFile(projectPath, patch.content, {
+              encoding: "utf-8",
+              flag: "wx", // write but fail if the path exists
+            }),
+          );
+          if (!writeRes.ok) {
             results.push({
               ok: false,
               path: patch.path,
@@ -185,11 +220,9 @@ The tool will present the proposed changes to the user for confirmation before a
               reason: "file already exists",
             });
             continue;
-          } else {
-            await writeFile(projectPath, patch.content, { encoding: "utf-8" });
-            results.push({ ok: true, path: patch.path, status: "add" });
-            continue;
           }
+          results.push({ ok: true, path: patch.path, status: "add" });
+          continue;
         }
         if (patch.type === "delete") {
           let projectPath = ensureProjectPath(cwd, patch.path);
@@ -201,8 +234,28 @@ The tool will present the proposed changes to the user for confirmation before a
           let projectPathFrom = ensureProjectPath(cwd, patch.path);
           let projectPathTo = ensureProjectPath(cwd, patch.to);
           let dir = dirname(projectPathTo);
-          await mkdir(dir, { recursive: true });
-          await rename(projectPathFrom, projectPathTo);
+          let mkdirRes = await tryCatch(mkdir(dir, { recursive: true }));
+          if (!mkdirRes.ok) {
+            results.push({
+              ok: false,
+              path: patch.path,
+              status: "move-failed",
+              reason: `failed to create directory ${dir}: ${mkdirRes.error}`,
+            });
+            continue;
+          }
+          let renameRes = await tryCatch(
+            rename(projectPathFrom, projectPathTo),
+          );
+          if (!renameRes.ok) {
+            results.push({
+              ok: false,
+              path: patch.path,
+              status: "move-failed",
+              reason: `failed to move file from ${patch.path} to ${patch.to}: ${renameRes.error}`,
+            });
+            continue;
+          }
           results.push({ ok: true, path: patch.path, status: "move" });
           continue;
         }
@@ -215,6 +268,7 @@ The tool will present the proposed changes to the user for confirmation before a
               ok: false,
               path: patch.path,
               status: "update-failed",
+              reason: "search pattern not found",
             });
           } else {
             await writeFile(projectPath, updatedContent, { encoding: "utf-8" });
@@ -225,6 +279,33 @@ The tool will present the proposed changes to the user for confirmation before a
             });
           }
 
+          continue;
+        }
+        if (patch.type === "replace") {
+          let projectPath = ensureProjectPath(cwd, patch.path);
+          let fileExists = await tryCatch(stat(projectPath));
+          if (!fileExists.ok) {
+            results.push({
+              ok: false,
+              path: patch.path,
+              status: "replace-failed",
+              reason: "file not found",
+            });
+            continue;
+          }
+          let writeRes = await tryCatch(
+            writeFile(projectPath, patch.content, { encoding: "utf-8" }),
+          );
+          if (!writeRes.ok) {
+            results.push({
+              ok: false,
+              path: patch.path,
+              status: "replace-failed",
+              reason: `failed to write file ${patch.path}: ${writeRes.error}`,
+            });
+            continue;
+          }
+          results.push({ ok: true, path: patch.path, status: "replace" });
           continue;
         }
         shouldNeverHappen(`unexpected patch type ${JSON.stringify(patch)}`);
@@ -240,28 +321,6 @@ The tool will present the proposed changes to the user for confirmation before a
     },
   });
 }
-
-type FilePatch =
-  | {
-      type: "add";
-      path: string;
-      content: string;
-    }
-  | {
-      type: "delete";
-      path: string;
-    }
-  | {
-      type: "update";
-      path: string;
-      search: string;
-      replace: string;
-    }
-  | {
-      type: "move";
-      path: string;
-      to: string;
-    };
 
 /**
  * Applies a patch to a string, ensuring that the search and replace operations
@@ -279,7 +338,7 @@ export function applyPatchToString(
   let replaceLines = patch.replace.split("\n");
 
   // Normalize lines by trimming whitespace for comparison
-  const normalizeLine = (line: string) => line.trim();
+  let normalizeLine = (line: string) => line.trim();
 
   let normalizedContentLines = contentLines.map(normalizeLine);
   let normalizedSearchLines = searchLines.map(normalizeLine);
@@ -288,7 +347,7 @@ export function applyPatchToString(
     return null;
   }
 
-  const matchStarts: number[] = [];
+  let matchStarts: number[] = [];
   for (
     let i = 0;
     i <= normalizedContentLines.length - normalizedSearchLines.length;
@@ -313,7 +372,7 @@ export function applyPatchToString(
   // Apply patches from the end to avoid index issues
   let updatedContentLines = [...contentLines];
   for (let k = matchStarts.length - 1; k >= 0; k--) {
-    const searchStart = matchStarts.at(k);
+    let searchStart = matchStarts.at(k);
     if (searchStart === undefined) {
       return shouldNeverHappen(
         `matchStarts.at(k) is undefined: ${matchStarts}.at(${k})`,
