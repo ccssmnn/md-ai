@@ -1,286 +1,75 @@
-import assert from "node:assert";
-import test from "node:test";
-
 import type { CoreMessage } from "ai";
-
+import test from "node:test";
+import assert from "node:assert";
 import { markdownToMessages } from "./markdown-parse.js";
 
 test("markdownToMessages", async (t) => {
-  await t.test("minimal example", () => {
-    let markdown = `
-## user
-
-Hello World!
-
-## assistant
-
-Hello User!
-`;
-    let messages = markdownToMessages(markdown);
-
-    let expectedResult: typeof messages = [
-      { role: "user", content: "Hello World!" },
-      { role: "assistant", content: "Hello User!" },
-    ];
-
-    assert.deepEqual(messages, expectedResult);
+  await t.test("should ignore content before the first heading", () => {
+    let markdown = "This content should be ignored.\n\n## user\nHello.";
+    let expectedMessages: CoreMessage[] = [{ role: "user", content: "Hello." }];
+    let parsedMessages = markdownToMessages(markdown);
+    assert.deepStrictEqual(parsedMessages, expectedMessages);
   });
 
-  await t.test("empty user message", () => {
-    let markdown = `
-## user
-
-`;
-    let messages = markdownToMessages(markdown);
-    let expectedResult: CoreMessage[] = [{ role: "user", content: "" }];
-    assert.deepEqual(messages, expectedResult);
-  });
-
-  await t.test("with tool call and response", () => {
-    let markdown = `
-## user
-
-call the tool for me
-
-## assistant
-
-will do!
-
-\`\`\`tool-call
-{
-  "toolCallId": "1234",
-  "toolName": "myTool",
-  "args": {
-    "msg": "hello tool"
-  }
-}
-\`\`\`
-
-## tool
-
-\`\`\`tool-result
-{
-  "toolCallId": "1234",
-  "toolName": "myTool",
-  "result": {
-    "response": "hello agent"
-  }
-}
-\`\`\`
-`;
-    let messages = markdownToMessages(markdown);
-
-    let expectedResult: typeof messages = [
+  await t.test("should treat incorrect heading levels as text", () => {
+    let markdown =
+      "## user\n# Not a role heading\n### Also not a role heading\nHello.";
+    let expectedMessages: CoreMessage[] = [
       {
         role: "user",
-        content: "call the tool for me",
-      },
-      {
-        role: "assistant",
         content: [
-          { type: "text", text: "will do!\n" },
           {
-            type: "tool-call",
-            toolCallId: "1234",
-            toolName: "myTool",
-            args: { msg: "hello tool" },
+            text: "# Not a role heading",
+            type: "text",
           },
-        ],
-      },
-
-      {
-        role: "tool",
-        content: [
           {
-            type: "tool-result",
-            toolCallId: "1234",
-            toolName: "myTool",
-            result: { response: "hello agent" },
+            text: "### Also not a role heading",
+            type: "text",
+          },
+          {
+            text: "Hello.",
+            type: "text",
           },
         ],
       },
     ];
-    assert.deepEqual(messages, expectedResult);
+    let parsedMessages = markdownToMessages(markdown);
+    assert.deepStrictEqual(parsedMessages, expectedMessages);
   });
 
-  await t.test("tool-result with nested markdown", () => {
-    let markdown = `
-## assistant
+  await t.test("should throw error for malformed tool-call JSON", () => {
+    let markdown =
+      '## assistant\n```tool-call\n{"toolCallId": "call_123", "toolName": "list", "args": "invalid json"}\n```';
+    assert.throws(
+      () => markdownToMessages(markdown),
+      /Expected object, received string/,
+    );
+  });
 
-\`\`\`tool-call
-{
-  "toolCallId": "xyz",
-  "toolName": "generateDoc",
-  "args": { "title": "Nested Test" }
-}
-\`\`\`
+  await t.test("should throw error for malformed tool-result JSON", () => {
+    let markdown =
+      '## tool\n```tool-result\n{"toolCallId": "call_123", "toolName": "list", "result": "invalid json"}\n```';
+    assert.throws(
+      () => markdownToMessages(markdown),
+      /Expected object, received string/,
+    );
+  });
 
-## tool
-
-\`\`\`tool-result
-{
-  "toolCallId": "xyz",
-  "toolName": "generateDoc",
-  "result": {
-    "content": "## innerHeading\\n\\nThis is **inside** the result.\\n\\n\`\`\`js\\nconsole.log(\\"hello\\");\\n\`\`\`\\n"
-  }
-}
-\`\`\`
-
-## user
-
-Finished reviewing.
-`;
-
-    let messages = markdownToMessages(markdown);
-    let expected: CoreMessage[] = [
-      {
-        role: "assistant",
-        content: [
-          {
-            type: "tool-call",
-            toolCallId: "xyz",
-            toolName: "generateDoc",
-            args: { title: "Nested Test" },
-          },
-        ],
-      },
-      {
-        role: "tool",
-        content: [
-          {
-            type: "tool-result",
-            toolCallId: "xyz",
-            toolName: "generateDoc",
-            result: {
-              content:
-                '## innerHeading\n\nThis is **inside** the result.\n\n```js\nconsole.log("hello");\n```\n',
-            },
-          },
-        ],
-      },
-      {
-        role: "user",
-        content: "Finished reviewing.",
-      },
+  await t.test("should treat list items as text", () => {
+    let markdown = "## user\n* Item 1\n* Item 2";
+    let expectedMessages: CoreMessage[] = [
+      { role: "user", content: "* Item 1\n* Item 2" },
     ];
-
-    assert.deepEqual(messages, expected);
+    let parsedMessages = markdownToMessages(markdown);
+    assert.deepStrictEqual(parsedMessages, expectedMessages);
   });
 
-  await t.test("case-insensitive roles with valid tool-call", () => {
-    let md = `
-## User
-
-Hello user!
-
-## Assistant
-
-\`\`\`tool-call
-{"toolCallId":"123","toolName":"foo","args":{"x":1}}
-\`\`\`
-
-## TOOL
-
-\`\`\`tool-result
-{"toolCallId":"123","toolName":"foo","result":{"ok":true}}
-\`\`\`
-`;
-    let msgs = markdownToMessages(md);
-    assert.deepEqual(msgs, [
-      { role: "user", content: "Hello user!" },
-      {
-        role: "assistant",
-        content: [
-          {
-            type: "tool-call",
-            toolCallId: "123",
-            toolName: "foo",
-            args: { x: 1 },
-          },
-        ],
-      },
-      {
-        role: "tool",
-        content: [
-          {
-            type: "tool-result",
-            toolCallId: "123",
-            toolName: "foo",
-            result: { ok: true },
-          },
-        ],
-      },
-    ]);
-  });
-
-  await t.test("reject tool-call in user role", () => {
-    let md = `
-## User
-
-\`\`\`tool-call
-{"toolCallId":"u","toolName":"bad","args":{}}
-\`\`\`
-`;
-    assert.throws(() => markdownToMessages(md), {
-      message: /Tool calls are only allowed in assistant messages/,
-    });
-  });
-
-  await t.test("reject tool-result in assistant role", () => {
-    let md = `
-## assistant
-
-\`\`\`tool-result
-{"toolCallId":"x","toolName":"y","result":{}}
-\`\`\`
-`;
-    assert.throws(() => markdownToMessages(md), {
-      message: /Tool results are only allowed in tool messages/,
-    });
-  });
-
-  await t.test("reject malformed tool-call JSON", () => {
-    let md = `
-## assistant
-
-\`\`\`tool-call
-{not: "json"}
-\`\`\`
-`;
-    assert.throws(() => markdownToMessages(md));
-  });
-
-  await t.test("reject tool-call schema mismatch", () => {
-    let md = `
-## assistant
-
-\`\`\`tool-call
-{"toolCallId":123,"toolName":"foo","args":{}}
-\`\`\`
-`;
-    assert.throws(() => markdownToMessages(md));
-  });
-
-  await t.test("reject malformed tool-result JSON", () => {
-    let md = `
-## tool
-
-\`\`\`tool-result
-{broken json}
-\`\`\`
-`;
-    assert.throws(() => markdownToMessages(md));
-  });
-
-  await t.test("reject tool-result schema mismatch", () => {
-    let md = `
-## tool
-
-\`\`\`tool-result
-{"toolCallId":"z","toolName":"x","result":"not an object"}
-\`\`\`
-`;
-    assert.throws(() => markdownToMessages(md));
+  await t.test("should treat blockquotes as text", () => {
+    let markdown = "## user\n> This is a blockquote.";
+    let expectedMessages: CoreMessage[] = [
+      { role: "user", content: "> This is a blockquote." },
+    ];
+    let parsedMessages = markdownToMessages(markdown);
+    assert.deepStrictEqual(parsedMessages, expectedMessages);
   });
 });

@@ -18,349 +18,372 @@ import { shouldNeverHappen, tryCatch } from "../utils.js";
 
 export function createWriteFilesTool(options: { cwd: string }) {
   return tool({
-    description: `STRICT PATCH FORMAT:
+    description: `Applies a series of file modifications based on a JSON array of patch objects.
 
-You are given a task to produce one or more patch blocks for file modifications. You MUST strictly follow the PATCH FORMAT below. Respond with only the patch text—no explanations, no apologies, no markdown or code fences, and no extra content.
+The input should be a JSON array where each element is an object representing a file operation. The possible operations are:
 
-FORMAT SPECIFICATION:
+1. Add File:
+   {
+     "type": "add",
+     "path": "<relative/path/to/file>",
+     "content": "<new file content>"
+   }
+   Creates a new file. Fails if the file already exists.
 
-1. OUTPUT ONLY PATCH BLOCKS:
-   - Do NOT include any other text or commentary.
-   - Do NOT wrap your output in markdown or any other delimiters.
-2. PATCH BLOCK STRUCTURE:
-   - Every patch must start with a patch type declaration line: '*** Add File:', '*** Delete File:', '*** Update File:', or '*** Move File:'.
-   - 'Add File' patches require a '<<< ADD' section followed by the new file content and a '>>>' terminator.
-   - 'Delete File' patches consist only of the declaration line.
-   - 'Update File' patches require a '<<< SEARCH' section containing the exact lines to be replaced, followed by a '===' separator, then the replacement lines, and finally the '>>>' terminator.
-   - 'Move File' patches require a '<<< TO' section followed by the new path and a '>>>' terminator.
+2. Delete File:
+   {
+     "type": "delete",
+     "path": "<relative/path/to/file>"
+   }
+   Deletes an existing file. Fails if the file does not exist.
 
-Schema structure for each patch action:
+3. Update File:
+   {
+     "type": "update",
+     "path": "<relative/path/to/file>",
+     "search": "<existing lines to replace>",
+     "replace": "<replacement lines>"
+   }
+   Modifies an existing file by replacing occurrences of 'search' content with 'replace' content. Fails if the file does not exist or if the 'search' pattern is not found.
+   Note: The tool ignores leading/trailing whitespace and indentation when matching the 'search' pattern. It will replace *all* occurrences of the matched pattern globally within the file. To update only a specific occurrence, include enough surrounding lines in the 'search' parameter to make that specific occurrence unique.
 
- *** Add File: <relative/path/to/file>
- <<< ADD
- <new file content lines>
- >>>
+4. Move File:
+   {
+     "type": "move",
+     "path": "<relative/path/from>",
+     "to": "<relative/path/to>"
+   }
+   Moves a file from one location to another. Fails if the file does not exist.
 
- *** Delete File: <relative/path/to/file>
+5. Replace File:
+   {
+     "type": "replace",
+     "path": "<relative/path/to/file>",
+     "content": "<new file content>"
+   }
+   Replaces the entire content of an existing file. Fails if the file does not exist.
+   Note: For large file modifications, using the 'replace' type is generally more efficient and reliable than using multiple or a single large 'update' patch.
 
- *** Update File: <relative/path/to/file>
- <<< SEARCH
- <exact existing lines to replace (including context)>
- ===
- <exact replacement lines>
- >>>
-
- *** Move File: <relative/path/to/file>
- <<< TO
- <relative/path/to/new/file>
- >>>
-
-3. DELIMITERS AND WHITESPACE:
-   - Each delimiter (***, <<<, ===, >>>) must start at the beginning of its line.
-   - Use UNIX newlines (\n) only.
-   - Do NOT include trailing spaces.
-4. MULTIPLE PATCHES:
-   - Concatenate multiple patch blocks directly, one after another.
-   - No blank lines between blocks, unless part of the file content.
-   - Do not skip delimiters when concatenating patches.
-5. ERROR AVOIDANCE:
-   - the search section has a delimiter '===' to split the lines to replace from the lines to replace them with.
-   - The search section in 'Update File' patches must contain the exact lines present in the original file.
-   - Ensure that every '<<< ADD', '<<< SEARCH', and '<<< TO' block is properly terminated with a corresponding '>>>'.
-
-EXAMPLE:
-*** Add File: src/new.txt
-<<< ADD
-Hello, world!
-This is a new file.
->>>
-*** Delete File: src/old.txt
-*** Update File: src/config.js
-<<< SEARCH
-port: 3000,
-===
-port: 4000,
->>>
-*** Update File: src/config.js
-<<< SEARCH
-host: "localhost",
-===
-host: "0.0.0.0",
->>>
-*** Move File: src/old.txt
-<<< TO
-src/new_location/old.txt
->>>
-
-Follow these rules exactly. Output begins immediately with the first *** line of the first patch block.
+The tool will present the proposed changes to the user for confirmation before applying them.
 `,
-    parameters: z.object({ patch: z.string() }),
-    execute: async ({ patch: patchString }) => {
+    parameters: writeFilesParameters,
+    execute: async ({ patches }) => {
+      log.step("write files: the model wants to make the changes");
+      log.info(patchesToDiffString(patches));
+
+      let patchesToAllow = await askWhichPatchesToAllow(patches);
+      if (patchesToAllow.type === "none") {
+        return {
+          ok: false,
+          status: "user-denied",
+          reason: "the user did not allow any of the patches. ask them why.",
+        };
+      }
+
       let { cwd } = options;
-      let parsedPatchesResult = tryCatch(() => parsePatchString(patchString));
-      if (!parsedPatchesResult.ok) {
-        return {
-          ok: false,
-          reason: `Error: Failed to parse patch string: ${parsedPatchesResult.error.message}`,
-        };
-      }
-      let patches = parsedPatchesResult.data;
-      let patchOptions = patches.map(
-        (patch, i): MultiSelectOptions<number>["options"][number] => {
-          if (patch.type === "delete") {
-            return { value: i, label: `DELETE ${patch.path}` };
+      let results = await Promise.all(
+        patches.map((patch, i) => {
+          if (
+            patchesToAllow.type === "some" &&
+            !patchesToAllow.allowedPatchIDs.includes(i)
+          ) {
+            return {
+              ok: false,
+              path: patch.path,
+              status: "user-denied",
+              reason: "user decided to not allow this patch. ask them why.",
+            };
           }
-          if (patch.type === "add") {
-            return { value: i, label: `ADD ${patch.path}` };
+          switch (patch.type) {
+            case "add":
+              return applyAddPatch(patch, cwd);
+            case "delete":
+              return applyDeletePatch(patch, cwd);
+            case "move":
+              return applyMovePatch(patch, cwd);
+            case "update":
+              return applyUpdatePatch(patch, cwd);
+            case "replace":
+              return applyReplacePatch(patch, cwd);
+            default:
+              patch satisfies never;
+              shouldNeverHappen(
+                `unexpected patch type ${JSON.stringify(patch)}`,
+              );
           }
-          if (patch.type === "update") {
-            return { value: i, label: `UPDATE ${patch.path}` };
-          }
-          if (patch.type === "move") {
-            return { value: i, label: `MOVE ${patch.path} to ${patch.path}` };
-          }
-          patch satisfies never;
-          shouldNeverHappen(`unexpected patch type ${JSON.stringify(patch)}`);
-        },
+        }),
       );
-
-      // we want the user to decide which patch to apply
-      // so we log the patch string here and then prompt for confirmation
-      log.info(patchString);
-
-      let firstResponse = await select({
-        message: "Choose which patches to apply",
-        options: [
-          { value: "all", label: "All" },
-          { value: "none", label: "None" },
-          { value: "some", label: "Some" },
-        ],
-      });
-
-      if (isCancel(firstResponse)) throw Error("user has canceled");
-
-      if (firstResponse === "none") {
-        return {
-          ok: false,
-          reason: "the user did not allow any of the patches.",
-        };
-      }
-
-      let results = [];
-
-      if (firstResponse === "some") {
-        let response = await multiselect<number>({
-          message: "Choose which patches to apply",
-          options: patchOptions,
-        });
-        if (isCancel(response)) throw Error("user has canceled");
-        patches = patches.filter((_, i) => {
-          let keep = response.includes(i);
-          if (!keep) {
-            results.push({ ok: false, path: _.path, status: "user-denied" });
-          }
-          return keep;
-        });
-      }
-
-      for (let patch of patches) {
-        if (patch.type === "add") {
-          let projectPath = ensureProjectPath(cwd, patch.path);
-          let fileExists = await tryCatch(stat(projectPath));
-          if (fileExists.ok) {
-            results.push({
-              ok: false,
-              path: patch.path,
-              status: "add-failed",
-              reason: "file already exists",
-            });
-            continue;
-          } else {
-            await writeFile(projectPath, patch.content, { encoding: "utf-8" });
-            results.push({ ok: true, path: patch.path, status: "add" });
-            continue;
-          }
-        }
-        if (patch.type === "delete") {
-          let projectPath = ensureProjectPath(cwd, patch.path);
-          await unlink(projectPath);
-          results.push({ ok: true, path: patch.path, status: "delete" });
-          continue;
-        }
-        if (patch.type === "move") {
-          let projectPathFrom = ensureProjectPath(cwd, patch.path);
-          let projectPathTo = ensureProjectPath(cwd, patch.to);
-          let dir = dirname(projectPathTo);
-          await mkdir(dir, { recursive: true });
-          await rename(projectPathFrom, projectPathTo);
-          results.push({ ok: true, path: patch.path, status: "move" });
-          continue;
-        }
-        if (patch.type === "update") {
-          let projectPath = ensureProjectPath(cwd, patch.path);
-          let content = await readFile(projectPath, { encoding: "utf-8" });
-          let updatedContent = applyPatchToString(content, patch);
-          if (updatedContent === null) {
-            results.push({
-              ok: false,
-              path: patch.path,
-              status: "update-failed",
-            });
-          } else {
-            await writeFile(projectPath, updatedContent, { encoding: "utf-8" });
-            results.push({
-              ok: true,
-              path: patch.path,
-              status: "update-successful",
-            });
-          }
-
-          continue;
-        }
-        shouldNeverHappen(`unexpected patch type ${JSON.stringify(patch)}`);
-      }
 
       let ok = results.every((r) => r.ok);
-      log.step(
-        `write files: ${results
-          .map((r) => `${r.path}:${r.status}`)
-          .join(", ")}`,
-      );
+      let summary = results.map((r) => `${r.path}:${r.status}`).join(", ");
+      log.step(`write files: ${summary}`);
       return { ok, results };
     },
   });
 }
 
-type FilePatch =
-  | {
-      type: "add";
-      path: string;
-      content: string;
-    }
-  | {
-      type: "delete";
-      path: string;
-    }
-  | {
-      type: "update";
-      path: string;
-      search: string;
-      replace: string;
-    }
-  | {
-      type: "move";
-      path: string;
-      to: string;
+let filePatchSchema = z.union([
+  z.object({
+    type: z.literal("add"),
+    path: z.string(),
+    content: z.string(),
+  }),
+  z.object({
+    type: z.literal("delete"),
+    path: z.string(),
+  }),
+  z.object({
+    type: z.literal("update"),
+    path: z.string(),
+    search: z.string(),
+    replace: z.string(),
+  }),
+  z.object({
+    type: z.literal("move"),
+    path: z.string(),
+    to: z.string(),
+  }),
+  z.object({
+    type: z.literal("replace"),
+    path: z.string(),
+    content: z.string(),
+  }),
+]);
+
+type FilePatch = z.infer<typeof filePatchSchema>;
+
+let writeFilesParameters = z.object({
+  patches: z.array(filePatchSchema),
+});
+
+function patchesToDiffString(patches: Array<FilePatch>) {
+  return patches
+    .map((p) => {
+      switch (p.type) {
+        case "add":
+          return [`*** Add File: ${p.path}`, "<<< ADD", p.content, ">>>"].join(
+            "\n",
+          );
+        case "delete":
+          return `*** Delete File: ${p.path}`;
+        case "move":
+          return [`*** Move File: ${p.path}`, "<<< TO", p.to, ">>>"].join("\n");
+        case "update":
+          return [
+            `*** Update File: ${p.path}`,
+            "<<< SEARCH",
+            p.search,
+            "===",
+            p.replace,
+            ">>>",
+          ].join("\n");
+        case "replace":
+          return [
+            `*** Replace File: ${p.path}`,
+            "<<< REPLACE WITH",
+            p.content,
+            ">>>",
+          ].join("\n");
+        default:
+          p satisfies never;
+      }
+    })
+    .join("\n");
+}
+
+async function askWhichPatchesToAllow(patches: Array<FilePatch>) {
+  let firstResponse = await select({
+    message: "Choose which patches to apply",
+    options: [
+      { value: "all", label: "All" },
+      { value: "none", label: "None" },
+      { value: "some", label: "Some" },
+    ],
+  });
+
+  if (isCancel(firstResponse)) throw Error("user has canceled");
+
+  if (firstResponse === "none") {
+    return { type: "none" as const };
+  }
+  if (firstResponse === "all") {
+    return { type: "all" as const };
+  }
+
+  let patchOptions = patches.map(
+    (patch, i): MultiSelectOptions<number>["options"][number] => {
+      switch (patch.type) {
+        case "delete":
+          return { value: i, label: `DELETE ${patch.path}` };
+        case "add":
+          return { value: i, label: `ADD ${patch.path}` };
+        case "update":
+          return { value: i, label: `UPDATE ${patch.path}` };
+        case "move":
+          return { value: i, label: `MOVE ${patch.path} to ${patch.to}` };
+        case "replace":
+          return { value: i, label: `REPLACE ${patch.path}` };
+        default:
+          patch satisfies never;
+          shouldNeverHappen(`unexpected patch type ${JSON.stringify(patch)}`);
+      }
+    },
+  );
+  let response = await multiselect<number>({
+    message: "Choose which patches to apply",
+    options: patchOptions,
+  });
+  if (isCancel(response)) throw Error("user has canceled");
+  return { type: "some" as const, allowedPatchIDs: response };
+}
+
+type PatchResult = {
+  ok: boolean;
+  path: string;
+  status: string;
+  reason?: string;
+};
+
+async function applyAddPatch(
+  patch: Extract<FilePatch, { type: "add" }>,
+  cwd: string,
+): Promise<PatchResult> {
+  let projectPath = ensureProjectPath(cwd, patch.path);
+  let writeRes = await tryCatch(
+    writeFile(projectPath, patch.content, {
+      encoding: "utf-8",
+      flag: "wx", // write but fail if the path exists
+    }),
+  );
+  if (!writeRes.ok) {
+    return {
+      ok: false,
+      path: patch.path,
+      status: "add-failed",
+      reason: "file already exists",
     };
+  }
+  return { ok: true, path: patch.path, status: "add" };
+}
 
-/**
- * Parses a patch string and returns a list of patch objects.
- * @param patchString The patch string to parse.
- * @returns A list of patch objects.
- */
-export function parsePatchString(patchString: string): Array<FilePatch> {
-  let lines = patchString.split("\n");
-  let patches: FilePatch[] = [];
+async function applyDeletePatch(
+  patch: Extract<FilePatch, { type: "delete" }>,
+  cwd: string,
+): Promise<PatchResult> {
+  let projectPath = ensureProjectPath(cwd, patch.path);
+  let unlinkRes = await tryCatch(unlink(projectPath));
+  if (!unlinkRes.ok) {
+    return {
+      ok: false,
+      path: patch.path,
+      status: "delete-failed",
+      reason: `failed to delete file ${patch.path}: ${unlinkRes.error}`,
+    };
+  }
+  return { ok: true, path: patch.path, status: "delete" };
+}
 
-  for (let i = 0; i < lines.length; ) {
-    let line = lines[i]?.trim();
-    if (line === undefined) break;
+async function applyMovePatch(
+  patch: Extract<FilePatch, { type: "move" }>,
+  cwd: string,
+): Promise<PatchResult> {
+  let projectPathFrom = ensureProjectPath(cwd, patch.path);
+  let projectPathTo = ensureProjectPath(cwd, patch.to);
+  let dir = dirname(projectPathTo);
+  let mkdirRes = await tryCatch(mkdir(dir, { recursive: true }));
+  if (!mkdirRes.ok) {
+    return {
+      ok: false,
+      path: patch.path,
+      status: "move-failed",
+      reason: `failed to create directory ${dir}: ${mkdirRes.error}`,
+    };
+  }
+  let renameRes = await tryCatch(rename(projectPathFrom, projectPathTo));
+  if (!renameRes.ok) {
+    return {
+      ok: false,
+      path: patch.path,
+      status: "move-failed",
+      reason: `failed to move file from ${patch.path} to ${patch.to}: ${renameRes.error}`,
+    };
+  }
+  return { ok: true, path: patch.path, status: "move" };
+}
 
-    if (line.startsWith("*** Add File:")) {
-      let path = line.substring("*** Add File:".length).trim();
-      i++;
-      if (i >= lines.length || lines[i]?.trim() !== "<<< ADD") {
-        i++; // consume the line
-        continue;
-      }
-      i++;
-      let contentLines: string[] = [];
-      while (i < lines.length && lines[i]?.trim() !== ">>>") {
-        contentLines.push(lines[i] ?? "");
-        i++;
-      }
-      let content = contentLines.join("\n");
-      patches.push({ type: "add", path: path, content: content });
-      i++;
-    } else if (line.startsWith("*** Delete File:")) {
-      let path = line.substring("*** Delete File:".length).trim();
-      patches.push({ type: "delete", path: path });
-      i++;
-    } else if (line.startsWith("*** Move File:")) {
-      let path = line.substring("*** Move File:".length).trim();
-      i++;
-      if (i >= lines.length || lines[i]?.trim() !== "<<< TO") {
-        i++; // consume the line
-        continue;
-      }
-      i++;
-      let toLines: string[] = [];
-      while (i < lines.length && lines[i]?.trim() !== ">>>") {
-        toLines.push(lines[i] ?? "");
-        i++;
-      }
-      let to = toLines.join("\n");
-      patches.push({
-        type: "move",
-        path: path,
-        to: to,
-      });
-      i++;
-    } else if (line.startsWith("*** Update File:")) {
-      let path = line.substring("*** Update File:".length).trim();
-      i++;
-      if (i >= lines.length || lines[i]?.trim() !== "<<< SEARCH") {
-        i++; // consume the line
-        continue;
-      }
-      i++;
-      let searchLines: string[] = [];
-      while (i < lines.length && lines[i]?.trim() !== "===") {
-        searchLines.push(lines[i] ?? "");
-        i++;
-      }
-      let search = searchLines.join("\n");
-      i++;
-      let replaceLines: string[] = [];
-      while (i < lines.length && lines[i]?.trim() !== ">>>") {
-        replaceLines.push(lines[i] ?? "");
-        i++;
-      }
-      let replace = replaceLines.join("\n");
-      patches.push({
-        type: "update",
-        path: path,
-        search: search,
-        replace: replace,
-      });
-      i++;
-    } else {
-      i++; // Skip lines that don't match any known pattern
-    }
+async function applyUpdatePatch(
+  patch: Extract<FilePatch, { type: "update" }>,
+  cwd: string,
+): Promise<PatchResult> {
+  let projectPath = ensureProjectPath(cwd, patch.path);
+  let contentRes = await tryCatch(readFile(projectPath, { encoding: "utf-8" }));
+  if (!contentRes.ok) {
+    return {
+      ok: false,
+      path: patch.path,
+      status: "update-failed",
+      reason: `failed to read file ${patch.path}: ${contentRes.error}`,
+    };
   }
 
-  let addFileCount = patchString
-    .split("\n")
-    .filter((line) => line.startsWith("*** Add File:")).length;
-  let updateFileCount = patchString
-    .split("\n")
-    .filter((line) => line.startsWith("*** Update File:")).length;
-  let deleteFileCount = patchString
-    .split("\n")
-    .filter((line) => line.startsWith("*** Delete File:")).length;
-  let moveFileCount = patchString
-    .split("\n")
-    .filter((line) => line.startsWith("*** Move File:")).length;
-
-  if (
-    addFileCount + updateFileCount + deleteFileCount + moveFileCount !==
-    patches.length
-  ) {
-    throw new Error(
-      "The number of patch declarations does not match the number of parsed patches.",
-    );
+  let updatedContentRes = tryCatch(() =>
+    applyPatchToString(contentRes.data, patch),
+  );
+  if (!updatedContentRes.ok) {
+    return {
+      ok: false,
+      path: patch.path,
+      status: "update-failed",
+      reason: updatedContentRes.error.message,
+    };
   }
-  return patches;
+
+  let writeFileRes = await tryCatch(
+    writeFile(projectPath, updatedContentRes.data, {
+      encoding: "utf-8",
+    }),
+  );
+  if (!writeFileRes.ok) {
+    return {
+      ok: false,
+      path: patch.path,
+      status: "update-failed",
+      reason: `failed to write update result: ${writeFileRes.error}`,
+    };
+  }
+  return {
+    ok: true,
+    path: patch.path,
+    status: "update-successful",
+  };
+}
+
+async function applyReplacePatch(
+  patch: Extract<FilePatch, { type: "replace" }>,
+  cwd: string,
+): Promise<PatchResult> {
+  let projectPath = ensureProjectPath(cwd, patch.path);
+  let fileExists = await tryCatch(stat(projectPath));
+  if (!fileExists.ok) {
+    return {
+      ok: false,
+      path: patch.path,
+      status: "replace-failed",
+      reason: "file not found",
+    };
+  }
+  let writeRes = await tryCatch(
+    writeFile(projectPath, patch.content, { encoding: "utf-8" }),
+  );
+  if (!writeRes.ok) {
+    return {
+      ok: false,
+      path: patch.path,
+      status: "replace-failed",
+      reason: `failed to write file ${patch.path}: ${writeRes.error}`,
+    };
+  }
+  return { ok: true, path: patch.path, status: "replace" };
 }
 
 /**
@@ -369,39 +392,63 @@ export function parsePatchString(patchString: string): Array<FilePatch> {
  * @param content The original content.
  * @param patch The patch to apply.
  * @returns The patched content, or null if the patch could not be applied.
+ * @throws a string if the patch could not be applied
  */
 export function applyPatchToString(
   content: string,
   patch: Extract<FilePatch, { type: "update" }>,
-): string | null {
+): string {
   let contentLines = content.split("\n");
   let searchLines = patch.search.split("\n");
   let replaceLines = patch.replace.split("\n");
 
-  let searchStart = -1;
-  for (let i = 0; i <= contentLines.length - searchLines.length; i++) {
+  // Normalize lines by trimming whitespace for comparison
+  let normalizeLine = (line: string) => line.trim();
+
+  let normalizedContentLines = contentLines.map(normalizeLine);
+  let normalizedSearchLines = searchLines.map(normalizeLine);
+
+  if (normalizedSearchLines.length === 0) {
+    throw new Error("search lines is empty");
+  }
+
+  let matchStarts: number[] = [];
+  for (
+    let i = 0;
+    i <= normalizedContentLines.length - normalizedSearchLines.length;
+    i++
+  ) {
     let match = true;
-    for (let j = 0; j < searchLines.length; j++) {
-      if (contentLines[i + j] !== searchLines[j]) {
+    for (let j = 0; j < normalizedSearchLines.length; j++) {
+      if (normalizedContentLines[i + j] !== normalizedSearchLines[j]) {
         match = false;
         break;
       }
     }
     if (match) {
-      searchStart = i;
-      break;
+      matchStarts.push(i);
     }
   }
 
-  if (searchStart === -1) {
-    return null; // Patch cannot be applied because the search string was not found
+  if (matchStarts.length === 0) {
+    throw new Error("did not find a match for the search lines");
   }
 
-  let updatedContentLines = [
-    ...contentLines.slice(0, searchStart),
-    ...replaceLines,
-    ...contentLines.slice(searchStart + searchLines.length),
-  ];
+  // Apply patches from the end to avoid index issues
+  let updatedContentLines = [...contentLines];
+  for (let k = matchStarts.length - 1; k >= 0; k--) {
+    let searchStart = matchStarts.at(k);
+    if (searchStart === undefined) {
+      return shouldNeverHappen(
+        `matchStarts.at(k) is undefined: ${matchStarts}.at(${k})`,
+      );
+    }
+    updatedContentLines.splice(
+      searchStart,
+      searchLines.length,
+      ...replaceLines,
+    );
+  }
 
   return updatedContentLines.join("\n");
 }

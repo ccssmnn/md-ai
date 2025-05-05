@@ -11,7 +11,7 @@ export function createReadFilesTool(options: { cwd: string }) {
   let { cwd } = options;
   return tool({
     description:
-      "open one or more files contents that match one or more glob patterns",
+      "open one or more files contents that match one or more glob patterns. does not open files that are ignored by .gitignore",
     parameters: z.object({
       patterns: z.array(z.string()).describe("glob patterns for files to open"),
     }),

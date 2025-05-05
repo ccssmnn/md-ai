@@ -5,10 +5,16 @@ import type { CoreMessage } from "ai";
 
 import { markdownToMessages } from "./markdown-parse.js";
 import { messagesToMarkdown } from "./markdown-serialize.js";
-import { confirm, log, spinner, stream } from "@clack/prompts";
+import {
+  confirm,
+  isCancel,
+  log,
+  select,
+  spinner,
+  stream,
+  text,
+} from "@clack/prompts";
 import { openInEditor } from "./editor.js";
-
-type AISDKArgs = Omit<Parameters<typeof streamText>[0], "messages" | "prompt">;
 
 /** Options for configuring a markdown-backed ai session */
 export interface MarkdownAIOptions {
@@ -16,6 +22,8 @@ export interface MarkdownAIOptions {
   path: string;
   /** Editor to use for user input. e.g. `code --wait` or `hx +99999` */
   editor: string;
+  /** Enables compression of args and results in tool fences in the markdown, defaults to true */
+  withCompression?: boolean;
 
   /** arguments that will be forwarded to the ai sdk `streamText` call */
   ai: AISDKArgs;
@@ -25,69 +33,94 @@ export interface MarkdownAIOptions {
 export class MarkdownAI {
   editor: string;
   chatPath: string;
-
   ai: AISDKArgs;
+  withCompression: boolean | undefined;
 
   constructor(options: MarkdownAIOptions) {
     this.chatPath = options.path;
     this.editor = options.editor;
-
     this.ai = options.ai;
+    this.withCompression = options.withCompression ?? true;
   }
 
-  /** Runs the chat session. */
+  /** runs the main chat loop */
   async run(): Promise<void> {
-    let canCallLLM = false;
-    while (true) {
-      let chat = await this.readChat();
-      let next = determineNextTurn(chat);
-      if (next.role === "user") {
-        let proceed = await this.userturn(next.addHeading);
-        if (!proceed) break;
-        canCallLLM = false;
+    let proceed = true;
+    while (proceed) {
+      let messages = await this.readAndParseChatFile();
+      let nextTurn = determineNextTurn(messages);
+      if (nextTurn.role === "user") {
+        proceed = await this.performUserTurn(nextTurn.addHeading);
         continue;
       }
-      if (!canCallLLM) {
-        let check = await confirm({
-          message: "Call the LLM?",
-          initialValue: true,
-        });
-        if (check !== true) break;
-        canCallLLM = true;
+      if (nextTurn.role === "assistant") {
+        proceed = await this.performAITurn(messages, nextTurn.skipConfirm);
+        continue;
       }
-      let proceed = await this.aiturn(chat);
-      if (!proceed) break;
+      nextTurn satisfies never;
     }
   }
 
-  /**
-   * Handles a user turn in the chat.
-   * @param addHeading - Whether to add a heading for the user message.
-   * @returns A promise that resolves to true if the user wants to continue the chat, false otherwise.
-   */
-  private async userturn(addHeading = false): Promise<boolean> {
+  private async performUserTurn(addHeading = false): Promise<boolean> {
     if (addHeading) {
       await appendFile(this.chatPath, "\n## user\n");
     }
-    let shouldOpenEditor = await confirm({
-      message: "Open Editor to enter user message?",
-      initialValue: true,
+    let shouldOpenEditor = await select({
+      message: "Your turn. What do you want to do?",
+      options: [
+        {
+          value: "open-editor",
+          label: `Open the editor '${this.editor}'`,
+        },
+        {
+          value: "prompt-directly",
+          label: "Write my message in the CLI",
+        },
+        { value: "stop", label: "Stop" },
+      ] as const,
+      initialValue: "open-editor" as const,
     });
-    if (shouldOpenEditor !== true) return false;
-    await openInEditor(this.editor, this.chatPath);
-    return true;
+    if (isCancel(shouldOpenEditor)) {
+      return false;
+    }
+    if (shouldOpenEditor === "stop") {
+      return false;
+    }
+    if (shouldOpenEditor === "open-editor") {
+      await openInEditor(this.editor, this.chatPath);
+      return true;
+    }
+    if (shouldOpenEditor === "prompt-directly") {
+      let message = await text({
+        message: "Your message:",
+        placeholder: "...",
+      });
+      if (isCancel(message)) return true;
+      await appendFile(this.chatPath, message);
+      return true;
+    }
+    shouldOpenEditor satisfies never;
+    return false;
   }
 
-  /**
-   * Handles a model turn in the chat.
-   * @param messages - The current chat history.
-   * @returns A promise that resolves to true if the model generated a response, false otherwise.
-   */
-  private async aiturn(messages: CoreMessage[]): Promise<boolean> {
+  private async performAITurn(
+    messages: CoreMessage[],
+    skipConfirm = false,
+  ): Promise<boolean> {
+    if (!skipConfirm) {
+      let check = await confirm({ message: "Call the LLM?" });
+      if (check !== true) return false;
+    }
+
+    let msgs = [...messages];
+    if (this.ai.system) {
+      msgs.unshift({ role: "system", content: this.ai.system });
+    }
+
     let requestOptions = {
       ...this.ai,
-      system: `${systemPrompt}\n${this.ai.system ?? ""}`,
-      messages,
+      system: systemPrompt,
+      messages: msgs,
     };
 
     // show spinner while waiting for model to start streaming
@@ -119,62 +152,52 @@ export class MarkdownAI {
 
     let responseMessages = (await response).messages;
 
-    await this.writeChat([...messages, ...responseMessages]);
+    await this.writeChatFile([...messages, ...responseMessages]);
 
     return true;
   }
 
-  /**
-   * Reads the chat history from the markdown file.
-   * @returns A promise that resolves to the chat history as an array of messages.
-   */
-  private async readChat(): Promise<CoreMessage[]> {
+  private async readAndParseChatFile(): Promise<CoreMessage[]> {
     let chatFileContent = await readFile(this.chatPath, { encoding: "utf-8" });
     let messages = markdownToMessages(chatFileContent);
     return messages;
   }
 
-  /**
-   * Writes the chat history to the markdown file.
-   * @param messages - The chat history to write.
-   * @returns a promise that resolves when the chat history has been written.
-   */
-  private async writeChat(messages: CoreMessage[]): Promise<void> {
-    let content = messagesToMarkdown(messages);
+  private async writeChatFile(messages: CoreMessage[]): Promise<void> {
+    let content = messagesToMarkdown(messages, this.withCompression);
     await writeFile(this.chatPath, content, { encoding: "utf-8" });
   }
 }
 
-/**
- * Represents the next turn in the chat.
- */
-type NextTurn = { role: "user"; addHeading: boolean } | { role: "assistant" };
+type AISDKArgs = Omit<Parameters<typeof streamText>[0], "messages" | "prompt">;
 
-/**
- * Determines the next turn in the chat based on the current chat history.
- * @param chat - The current chat history.
- * @returns An object representing the next turn.
- */
+type NextTurn =
+  | { role: "user"; addHeading: boolean }
+  | { role: "assistant"; skipConfirm: boolean };
+
 function determineNextTurn(chat: CoreMessage[]): NextTurn {
   let lastMessage = chat.at(-1);
-  if (!lastMessage || lastMessage.role === "assistant") {
-    return {
-      role: "user",
-      addHeading: true,
-    };
-  }
-  if (
-    lastMessage.role === "user" &&
-    typeof lastMessage.content === "string" &&
-    lastMessage.content.length === 0
-  ) {
-    return {
-      role: "user",
-      addHeading: false,
-    };
+  if (!lastMessage) {
+    return { role: "user", addHeading: true };
   }
 
-  return { role: "assistant" };
+  if (lastMessage.role === "assistant") {
+    return { role: "user", addHeading: true };
+  }
+
+  if (lastMessage.role === "system") {
+    return { role: "user", addHeading: true };
+  }
+
+  if (lastMessage.role === "tool") {
+    return { role: "assistant", skipConfirm: true };
+  }
+
+  if (lastMessage.content.length === 0) {
+    return { role: "user", addHeading: false };
+  }
+
+  return { role: "assistant", skipConfirm: false };
 }
 
 let systemPrompt = `

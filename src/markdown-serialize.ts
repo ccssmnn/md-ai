@@ -1,92 +1,143 @@
-import type { CoreAssistantMessage, ToolResultPart, CoreMessage } from "ai";
+import type {
+  CoreAssistantMessage,
+  ToolResultPart,
+  CoreMessage,
+  CoreUserMessage,
+} from "ai";
+
 import { shouldNeverHappen } from "./utils.js";
+import { brotliCompressSync } from "node:zlib";
+import { Buffer } from "node:buffer";
 
 /**
  * Convert messages into markdown with compact JSON tool fences.
+ * Optionally compress tool call and tool result fences using Brotli.
  */
-export function messagesToMarkdown(messages: Array<CoreMessage>): string {
+export function messagesToMarkdown(
+  messages: Array<CoreMessage>,
+  compressed: boolean = true,
+): string {
   let md = "";
 
   for (let msg of messages) {
     md += `## ${msg.role}\n\n`;
 
     if (msg.role === "system") {
-      md += `${msg.content}\n\n`;
+      md += msg.content + "\n\n";
       continue;
     }
 
     if (msg.role === "user") {
-      if (typeof msg.content === "string") {
-        md += `${msg.content}\n\n`;
-      } else {
-        for (let part of msg.content) {
-          if (part.type !== "text") {
-            shouldNeverHappen(
-              `file and image parts of the user message cannot be serialized yet. got message: ${JSON.stringify(msg)}`,
-            );
-          }
-          md += `${part.text}\n\n`;
-        }
-      }
+      md += serializeUserParts(msg.content) + "\n\n";
       continue;
     }
 
     if (msg.role === "assistant") {
-      if (typeof msg.content === "string") {
-        md += msg.content;
-      } else {
-        md += serializeAssistantParts(msg.content) + "\n\n";
-      }
+      md += serializeAssistantParts(msg.content, compressed) + "\n\n";
       continue;
     }
 
     if (msg.role === "tool") {
-      md += serializeToolResultParts(msg.content) + "\n\n";
+      md += serializeToolResultParts(msg.content, compressed) + "\n\n";
       continue;
     }
 
+    msg satisfies never;
     shouldNeverHappen(`unexpected message: ${msg}`);
   }
 
   return md.trimEnd() + "\n";
 }
 
-function serializeAssistantParts(
-  parts: Exclude<CoreAssistantMessage["content"], string>,
-): string {
+function serializeUserParts(parts: CoreUserMessage["content"]) {
+  if (typeof parts === "string") {
+    return parts;
+  }
   let out = "";
-  for (let p of parts) {
+
+  parts.forEach((p, i) => {
+    if (p.type === "text") {
+      out += p.text;
+    } else {
+      shouldNeverHappen(`unsupported user message content part type ${p.type}`);
+    }
+    // Add a blank line after each part except the last one.
+    if (i < parts.length - 1) {
+      out += "\n\n";
+    }
+  });
+  return out;
+}
+
+function serializeAssistantParts(
+  parts: CoreAssistantMessage["content"],
+  compressed: boolean,
+): string {
+  if (typeof parts === "string") {
+    return parts;
+  }
+  let out = "";
+  parts.forEach((p, i) => {
     if (p.type === "text") {
       out += p.text;
     } else if (p.type === "tool-call") {
-      let payload = {
+      let payload: any = {
         toolCallId: p.toolCallId,
         toolName: p.toolName,
-        args: p.args,
       };
-      let json = JSON.stringify(payload);
-      out += `\n${fence("tool-call", json)}`;
+      if (compressed) {
+        const argsJson = JSON.stringify(p.args);
+        const compressedArgs = brotliCompressSync(
+          Buffer.from(argsJson, "utf-8"),
+        );
+        payload.compressedArgs = compressedArgs.toString("base64");
+        out += fence("tool-call-compressed", JSON.stringify(payload));
+      } else {
+        payload.args = p.args;
+        out += fence("tool-call", JSON.stringify(payload));
+      }
     } else {
-      shouldNeverHappen(`unsupported part type ${p.type}`);
+      shouldNeverHappen(
+        `unsupported assistent message content part type ${p.type}`,
+      );
+    }
+    // Add a blank line after each part except the last one.
+    if (i < parts.length - 1) {
+      out += "\n\n";
+    }
+  });
+  return out;
+}
+
+function serializeToolResultParts(
+  parts: Array<ToolResultPart>,
+  compressed: boolean,
+): string {
+  let out = "";
+  for (let p of parts) {
+    let payload: any = {
+      toolCallId: p.toolCallId,
+      toolName: p.toolName,
+    };
+    if (compressed) {
+      const resultJson = JSON.stringify(p.result);
+      const compressedResult = brotliCompressSync(
+        Buffer.from(resultJson, "utf-8"),
+      );
+      payload.compressedResult = compressedResult.toString("base64");
+      out += fence("tool-result-compressed", JSON.stringify(payload));
+    } else {
+      payload.result = p.result;
+      out += fence("tool-result", JSON.stringify(payload));
     }
   }
   return out;
 }
 
-function serializeToolResultParts(parts: Array<ToolResultPart>): string {
-  let out = "";
-  for (let p of parts) {
-    let payload = {
-      toolCallId: p.toolCallId,
-      toolName: p.toolName,
-      result: p.result,
-    };
-    let json = JSON.stringify(payload);
-    out += `\n${fence("tool-result", json)}`;
-  }
-  return out;
-}
-
 function fence(name: string, content: string): string {
-  return `\`\`\`${name}\n${content}\n\`\`\``;
+  return `
+${"```"}${name}
+${content}
+${"```"}
+`;
 }
