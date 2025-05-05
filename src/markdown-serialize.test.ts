@@ -6,7 +6,7 @@ import type { CoreMessage } from "ai";
 import { markdownToMessages } from "./markdown-parse.js";
 import { messagesToMarkdown } from "./markdown-serialize.js";
 
-test("Roundtrip Serialization and Parsing", async (t) => {
+test("roundtrip markdown serialization and parsing", async (t) => {
   let testCases: Array<{ name: string; messages: CoreMessage[] }> = [
     {
       name: "Simple user and assistant messages",

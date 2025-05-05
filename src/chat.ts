@@ -33,35 +33,23 @@ export class MarkdownAI {
 
   /** runs the main chat loop */
   async run(): Promise<void> {
-    let canCallLLM = false;
-    while (true) {
-      let chat = await this.readChat();
-      let next = determineNextTurn(chat);
-      if (next.role === "user") {
-        let proceed = await this.userturn(next.addHeading);
-        if (!proceed) break;
-        canCallLLM = false;
+    let proceed = true;
+    while (proceed) {
+      let messages = await this.readAndParseChatFile();
+      let nextTurn = determineNextTurn(messages);
+      if (nextTurn.role === "user") {
+        proceed = await this.performUserTurn(nextTurn.addHeading);
         continue;
       }
-      if (!canCallLLM) {
-        let check = await confirm({
-          message: "Call the LLM?",
-          initialValue: true,
-        });
-        if (check !== true) break;
-        canCallLLM = true;
+      if (nextTurn.role === "assistant") {
+        proceed = await this.performAITurn(messages, nextTurn.skipConfirm);
+        continue;
       }
-      let proceed = await this.aiturn(chat);
-      if (!proceed) break;
+      nextTurn satisfies never;
     }
   }
 
-  /**
-   * Handles a user turn in the chat.
-   * @param addHeading - Whether to add a heading for the user message.
-   * @returns A promise that resolves to true if the user wants to continue the chat, false otherwise.
-   */
-  private async userturn(addHeading = false): Promise<boolean> {
+  private async performUserTurn(addHeading = false): Promise<boolean> {
     if (addHeading) {
       await appendFile(this.chatPath, "\n## user\n");
     }
@@ -74,12 +62,15 @@ export class MarkdownAI {
     return true;
   }
 
-  /**
-   * Handles a model turn in the chat.
-   * @param messages - The current chat history.
-   * @returns A promise that resolves to true if the model generated a response, false otherwise.
-   */
-  private async aiturn(messages: CoreMessage[]): Promise<boolean> {
+  private async performAITurn(
+    messages: CoreMessage[],
+    skipConfirm = false,
+  ): Promise<boolean> {
+    if (!skipConfirm) {
+      let check = await confirm({ message: "Call the LLM?" });
+      if (check !== true) return false;
+    }
+
     let msgs = [...messages];
     if (this.ai.system) {
       msgs.unshift({ role: "system", content: this.ai.system });
@@ -120,27 +111,18 @@ export class MarkdownAI {
 
     let responseMessages = (await response).messages;
 
-    await this.writeChat([...messages, ...responseMessages]);
+    await this.writeChatFile([...messages, ...responseMessages]);
 
     return true;
   }
 
-  /**
-   * Reads the chat history from the markdown file.
-   * @returns A promise that resolves to the chat history as an array of messages.
-   */
-  private async readChat(): Promise<CoreMessage[]> {
+  private async readAndParseChatFile(): Promise<CoreMessage[]> {
     let chatFileContent = await readFile(this.chatPath, { encoding: "utf-8" });
     let messages = markdownToMessages(chatFileContent);
     return messages;
   }
 
-  /**
-   * Writes the chat history to the markdown file.
-   * @param messages - The chat history to write.
-   * @returns a promise that resolves when the chat history has been written.
-   */
-  private async writeChat(messages: CoreMessage[]): Promise<void> {
+  private async writeChatFile(messages: CoreMessage[]): Promise<void> {
     let content = messagesToMarkdown(messages);
     await writeFile(this.chatPath, content, { encoding: "utf-8" });
   }
@@ -148,28 +130,33 @@ export class MarkdownAI {
 
 type AISDKArgs = Omit<Parameters<typeof streamText>[0], "messages" | "prompt">;
 
-type NextTurn = { role: "user"; addHeading: boolean } | { role: "assistant" };
+type NextTurn =
+  | { role: "user"; addHeading: boolean }
+  | { role: "assistant"; skipConfirm: boolean };
 
 function determineNextTurn(chat: CoreMessage[]): NextTurn {
   let lastMessage = chat.at(-1);
-  if (!lastMessage || lastMessage.role === "assistant") {
-    return {
-      role: "user",
-      addHeading: true,
-    };
-  }
-  if (
-    lastMessage.role === "user" &&
-    typeof lastMessage.content === "string" &&
-    lastMessage.content.length === 0
-  ) {
-    return {
-      role: "user",
-      addHeading: false,
-    };
+  if (!lastMessage) {
+    return { role: "user", addHeading: true };
   }
 
-  return { role: "assistant" };
+  if (lastMessage.role === "assistant") {
+    return { role: "user", addHeading: true };
+  }
+
+  if (lastMessage.role === "system") {
+    return { role: "user", addHeading: true };
+  }
+
+  if (lastMessage.role === "tool") {
+    return { role: "assistant", skipConfirm: true };
+  }
+
+  if (lastMessage.content.length === 0) {
+    return { role: "user", addHeading: false };
+  }
+
+  return { role: "assistant", skipConfirm: false };
 }
 
 let systemPrompt = `
