@@ -8,8 +8,6 @@ import { messagesToMarkdown } from "./markdown-serialize.js";
 import { confirm, log, spinner, stream } from "@clack/prompts";
 import { openInEditor } from "./editor.js";
 
-type AISDKArgs = Omit<Parameters<typeof streamText>[0], "messages" | "prompt">;
-
 /** Options for configuring a markdown-backed ai session */
 export interface MarkdownAIOptions {
   /** The path to the markdown file containing the chat history.*/
@@ -25,17 +23,15 @@ export interface MarkdownAIOptions {
 export class MarkdownAI {
   editor: string;
   chatPath: string;
-
   ai: AISDKArgs;
 
   constructor(options: MarkdownAIOptions) {
     this.chatPath = options.path;
     this.editor = options.editor;
-
     this.ai = options.ai;
   }
 
-  /** Runs the chat session. */
+  /** runs the main chat loop */
   async run(): Promise<void> {
     let canCallLLM = false;
     while (true) {
@@ -150,16 +146,10 @@ export class MarkdownAI {
   }
 }
 
-/**
- * Represents the next turn in the chat.
- */
+type AISDKArgs = Omit<Parameters<typeof streamText>[0], "messages" | "prompt">;
+
 type NextTurn = { role: "user"; addHeading: boolean } | { role: "assistant" };
 
-/**
- * Determines the next turn in the chat based on the current chat history.
- * @param chat - The current chat history.
- * @returns An object representing the next turn.
- */
 function determineNextTurn(chat: CoreMessage[]): NextTurn {
   let lastMessage = chat.at(-1);
   if (!lastMessage || lastMessage.role === "assistant") {

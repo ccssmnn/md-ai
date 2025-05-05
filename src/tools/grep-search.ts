@@ -28,28 +28,36 @@ export function createGrepSearchTool(options: { cwd: string }) {
         return { stdout: "No files found matching the patterns.", code: 0 };
       }
 
-      return new Promise<{ stdout: string; code: number }>((resolve) => {
-        let args = ["-n", "-H", "-F", query, ...fileList];
-        let proc = spawn("grep", args, { cwd: options.cwd });
-        let stdout = "";
-        proc.stdout.on("data", (data) => {
-          stdout += data.toString();
-        });
-        let stderr = "";
-        proc.stderr.on("data", (data) => {
-          stderr += data.toString();
-        });
-        proc.on("error", (err) => {
-          console.error("grep error:", err);
-          resolve({ stdout: "", code: -1 });
-        });
-        proc.on("close", (code) => {
-          if (code !== 0) {
-            console.error("grep failed with code", code, ":", stderr);
-          }
-          resolve({ stdout, code: code ?? 0 });
-        });
-      });
+      return runGrepProcess(query, fileList, options.cwd);
     },
+  });
+}
+
+async function runGrepProcess(
+  query: string,
+  fileList: string[],
+  cwd: string,
+): Promise<{ stdout: string; code: number }> {
+  return new Promise((resolve) => {
+    let args = ["-n", "-H", "-F", query, ...fileList];
+    let proc = spawn("grep", args, { cwd });
+    let stdout = "";
+    proc.stdout.on("data", (data) => {
+      stdout += data.toString();
+    });
+    let stderr = "";
+    proc.stderr.on("data", (data) => {
+      stderr += data.toString();
+    });
+    proc.on("error", (err) => {
+      console.error("grep error:", err);
+      resolve({ stdout: "", code: -1 });
+    });
+    proc.on("close", (code) => {
+      if (code !== 0) {
+        console.error("grep failed with code", code, ":", stderr);
+      }
+      resolve({ stdout, code: code ?? 0 });
+    });
   });
 }
