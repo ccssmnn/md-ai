@@ -5,7 +5,15 @@ import type { CoreMessage } from "ai";
 
 import { markdownToMessages } from "./markdown-parse.js";
 import { messagesToMarkdown } from "./markdown-serialize.js";
-import { confirm, log, spinner, stream } from "@clack/prompts";
+import {
+  confirm,
+  isCancel,
+  log,
+  select,
+  spinner,
+  stream,
+  text,
+} from "@clack/prompts";
 import { openInEditor } from "./editor.js";
 
 /** Options for configuring a markdown-backed ai session */
@@ -53,13 +61,42 @@ export class MarkdownAI {
     if (addHeading) {
       await appendFile(this.chatPath, "\n## user\n");
     }
-    let shouldOpenEditor = await confirm({
-      message: "Open Editor to enter user message?",
-      initialValue: true,
+    let shouldOpenEditor = await select({
+      message: "Your turn. What do you want to do?",
+      options: [
+        {
+          value: "open-editor",
+          label: `Open the editor '${this.editor}'`,
+        },
+        {
+          value: "prompt-directly",
+          label: "Write my message in the CLI",
+        },
+        { value: "stop", label: "Stop" },
+      ] as const,
+      initialValue: "open-editor" as const,
     });
-    if (shouldOpenEditor !== true) return false;
-    await openInEditor(this.editor, this.chatPath);
-    return true;
+    if (isCancel(shouldOpenEditor)) {
+      return false;
+    }
+    if (shouldOpenEditor === "stop") {
+      return false;
+    }
+    if (shouldOpenEditor === "open-editor") {
+      await openInEditor(this.editor, this.chatPath);
+      return true;
+    }
+    if (shouldOpenEditor === "prompt-directly") {
+      let message = await text({
+        message: "Your message:",
+        placeholder: "...",
+      });
+      if (isCancel(message)) return true;
+      await appendFile(this.chatPath, message);
+      return true;
+    }
+    shouldOpenEditor satisfies never;
+    return false;
   }
 
   private async performAITurn(
