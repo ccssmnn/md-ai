@@ -13,7 +13,10 @@ import { Buffer } from "node:buffer";
  * Convert messages into markdown with compact JSON tool fences.
  * Optionally compress tool call and tool result fences using Brotli.
  */
-export function messagesToMarkdown(messages: Array<CoreMessage>, compressed: boolean = true): string {
+export function messagesToMarkdown(
+  messages: Array<CoreMessage>,
+  compressed: boolean = true,
+): string {
   let md = "";
 
   for (let msg of messages) {
@@ -68,7 +71,7 @@ function serializeUserParts(parts: CoreUserMessage["content"]) {
 
 function serializeAssistantParts(
   parts: CoreAssistantMessage["content"],
-  compressed: boolean
+  compressed: boolean,
 ): string {
   if (typeof parts === "string") {
     return parts;
@@ -84,8 +87,10 @@ function serializeAssistantParts(
       };
       if (compressed) {
         const argsJson = JSON.stringify(p.args);
-        const compressedArgs = brotliCompressSync(Buffer.from(argsJson, 'utf-8'));
-        payload.compressedArgs = compressedArgs.toString('base64');
+        const compressedArgs = brotliCompressSync(
+          Buffer.from(argsJson, "utf-8"),
+        );
+        payload.compressedArgs = compressedArgs.toString("base64");
         out += fence("tool-call-compressed", JSON.stringify(payload));
       } else {
         payload.args = p.args;
@@ -104,7 +109,10 @@ function serializeAssistantParts(
   return out;
 }
 
-function serializeToolResultParts(parts: Array<ToolResultPart>, compressed: boolean): string {
+function serializeToolResultParts(
+  parts: Array<ToolResultPart>,
+  compressed: boolean,
+): string {
   let out = "";
   for (let p of parts) {
     let payload: any = {
@@ -113,8 +121,10 @@ function serializeToolResultParts(parts: Array<ToolResultPart>, compressed: bool
     };
     if (compressed) {
       const resultJson = JSON.stringify(p.result);
-      const compressedResult = brotliCompressSync(Buffer.from(resultJson, 'utf-8'));
-      payload.compressedResult = compressedResult.toString('base64');
+      const compressedResult = brotliCompressSync(
+        Buffer.from(resultJson, "utf-8"),
+      );
+      payload.compressedResult = compressedResult.toString("base64");
       out += fence("tool-result-compressed", JSON.stringify(payload));
     } else {
       payload.result = p.result;
