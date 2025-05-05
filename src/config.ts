@@ -11,6 +11,7 @@ let configSchema = z.object({
   model: z.string().optional(),
   system: z.string().optional(),
   editor: z.string().optional(),
+  compression: z.boolean().optional(),
 });
 
 export type MarkdownAIConfig = z.output<typeof configSchema>;

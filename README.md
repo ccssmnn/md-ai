@@ -6,19 +6,19 @@ A command-line tool and library for agentic coding using markdown in your own `$
 
 My opinions:
 
-- LLM Chat Editing experience is bad
-- Editing experience in _my editor_ is good
+- LLM Chat Editing experience in web and editor UIs is bad
+- Editing files experience in _my editor_ is good
 - LLMs respond in markdown anyway
 - Markdown in editors comes with syntax highlighting for free
 - Lives on my machine, uses my API keys, can use my tools
 
 ## Features
 
-- The entire chat is a single markdown file, including tool calls.
-- Opens your `$EDITOR` for editing the chat - you can edit everything with your preferred editor.
-- Tool calling with built in tools for listing, reading, searching and writing files.
+- The entire chat is stored as a single markdown file, including tool calls.
+- Chat with the LLM in the terminal.
+- Open your editor from the CLI to edit the entire chat history, continue after the editor is closed.
+- Built in tools for listing, reading, searching and writing files. Asks for permission when writing.
 - Provide a custom system prompt.
-- Streams responses from AI models to the console while they are generated.
 - Library mode allows you to provide a custom model and custom tools and plug MCP servers via [MCP Tools](https://ai-sdk.dev/docs/ai-sdk-core/tools-and-tool-calling#mcp-tools).
 
 ## Installation
@@ -27,8 +27,6 @@ Install as a library:
 
 ```bash
 npm install @ccssmnn/md-ai
-# or
-pnpm add @ccssmnn/md-ai
 ```
 
 Install CLI globally:
@@ -123,6 +121,7 @@ The `config.json` file is a simple JSON object with the following optional keys:
 - `model`: Specifies the default AI model (e.g., `"google:gemini-2.0-flash"`).
 - `system`: Specifies the path to a default system prompt file.
 - `editor`: Specifies the default editor command.
+- `compression`: Boolean to enable/disable compression for tool call/result fences.
 
 Example `config.json`:
 
@@ -161,7 +160,8 @@ Options:
 - `-m, --model <provider:model>` Provider and model to use (default: google:gemini-2.0-flash).
 - `-e, --editor <cmd>` Editor command (default: $EDITOR or 'vi +99999').
 - `-c, --cwd <path>` Working directory for file tools (default: current working directory).
-- `--no-tools` Disable tools (list, read, write, grep) (pure chat mode)
+- `--no-tools` Disable all tools (list, read, write, grep) (pure chat mode)
+- `--no-compression` Disable compression for tool call/result fences
 
 ## Library Usage
 

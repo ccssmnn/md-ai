@@ -22,6 +22,8 @@ export interface MarkdownAIOptions {
   path: string;
   /** Editor to use for user input. e.g. `code --wait` or `hx +99999` */
   editor: string;
+  /** Enables compression of args and results in tool fences in the markdown, defaults to true */
+  withCompression?: boolean;
 
   /** arguments that will be forwarded to the ai sdk `streamText` call */
   ai: AISDKArgs;
@@ -32,11 +34,13 @@ export class MarkdownAI {
   editor: string;
   chatPath: string;
   ai: AISDKArgs;
+  withCompression: boolean | undefined;
 
   constructor(options: MarkdownAIOptions) {
     this.chatPath = options.path;
     this.editor = options.editor;
     this.ai = options.ai;
+    this.withCompression = options.withCompression ?? true;
   }
 
   /** runs the main chat loop */
@@ -160,7 +164,7 @@ export class MarkdownAI {
   }
 
   private async writeChatFile(messages: CoreMessage[]): Promise<void> {
-    let content = messagesToMarkdown(messages);
+    let content = messagesToMarkdown(messages, this.withCompression);
     await writeFile(this.chatPath, content, { encoding: "utf-8" });
   }
 }

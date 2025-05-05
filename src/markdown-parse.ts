@@ -3,6 +3,8 @@ import remarkParse from "remark-parse";
 import { z } from "zod";
 import type { Root, Paragraph, PhrasingContent, Node, Code } from "mdast";
 import type { CoreMessage, TextPart, ToolCallPart, ToolResultPart } from "ai";
+import { brotliDecompressSync } from "node:zlib";
+import { Buffer } from "node:buffer";
 
 /**
  * transforms a markdown string into a list of CoreMessage that can be passed into the ai sdk
@@ -63,9 +65,57 @@ function processCodeNode(node: Code, markdown: string): ContentPart[] {
     let data = toolCallSchema.parse(JSON.parse(node.value));
     return [{ type: "tool-call", ...data }];
   }
+  if (node.lang === "tool-call-compressed") {
+    try {
+      const parsed = JSON.parse(node.value);
+      const compressedArgsBuffer = Buffer.from(parsed.compressedArgs, "base64");
+      const argsJson =
+        brotliDecompressSync(compressedArgsBuffer).toString("utf-8");
+      const args = JSON.parse(argsJson);
+      const data = toolCallSchema.parse({
+        toolCallId: parsed.toolCallId,
+        toolName: parsed.toolName,
+        args: args,
+      });
+      return [{ type: "tool-call", ...data }];
+    } catch (e) {
+      console.error(
+        "Failed to decompress or parse tool-call-compressed data:",
+        e,
+      );
+      // Fallback to treating as text if decompression/parsing fails
+      return [{ type: "text", text: raw }];
+    }
+  }
   if (node.lang === "tool-result") {
     let data = toolResultSchema.parse(JSON.parse(node.value));
     return [{ type: "tool-result", ...data }];
+  }
+  if (node.lang === "tool-result-compressed") {
+    try {
+      const parsed = JSON.parse(node.value);
+      const compressedResultBuffer = Buffer.from(
+        parsed.compressedResult,
+        "base64",
+      );
+      const resultJson = brotliDecompressSync(compressedResultBuffer).toString(
+        "utf-8",
+      );
+      const result = JSON.parse(resultJson);
+      const data = toolResultSchema.parse({
+        toolCallId: parsed.toolCallId,
+        toolName: parsed.toolName,
+        result: result,
+      });
+      return [{ type: "tool-result", ...data }];
+    } catch (e) {
+      console.error(
+        "Failed to decompress or parse tool-result-compressed data:",
+        e,
+      );
+      // Fallback to treating as text if decompression/parsing fails
+      return [{ type: "text", text: raw }];
+    }
   }
   return [{ type: "text", text: raw }];
 }
@@ -107,7 +157,9 @@ type Role = (typeof VALID_ROLES)[number];
 function checkRoleHeading(node?: PhrasingContent): Role | null {
   if (!node) return null;
   if (node.type !== "text") return null;
-  if (!VALID_ROLES.includes(node.value.trim().toLowerCase() as any))
+  let value = node.value.trim().toLocaleLowerCase();
+  if (!VALID_ROLES.includes(value as any)) {
     return null;
-  return node.value.trim().toLowerCase() as Role;
+  }
+  return value as Role;
 }

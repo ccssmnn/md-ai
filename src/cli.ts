@@ -50,6 +50,7 @@ let program = new Command()
   )
   .option("--show-config", "Log final configuration")
   .option("--no-tools", "Disable tools (pure chat mode)")
+  .option("--no-compression", "Disable compression for tool call/result fences")
   .parse(process.argv);
 
 let chatPath = program.args[0];
@@ -67,6 +68,7 @@ if (!writeChatRes.ok) {
 intro("Hey! I'm Markdown AI 🫡");
 
 let opts = program.opts();
+
 let loadedConfig = await loadConfig(opts.config);
 
 let config = {
@@ -74,6 +76,8 @@ let config = {
   model: opts.model || loadedConfig.model || "google:gemini-2.0-flash",
   editor:
     opts.editor || loadedConfig.editor || process.env.EDITOR || "vi +99999",
+  compression:
+    opts.compression === true ? !loadedConfig.compression : opts.compression,
 };
 
 let system: string | undefined;
@@ -105,6 +109,7 @@ let chat = new MarkdownAI({
   path: chatPath,
   editor: config.editor,
   ai: { model, system, tools },
+  withCompression: config.compression,
 });
 
 if (opts.showConfig) {

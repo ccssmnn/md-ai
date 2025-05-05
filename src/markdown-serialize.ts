@@ -6,11 +6,14 @@ import type {
 } from "ai";
 
 import { shouldNeverHappen } from "./utils.js";
+import { brotliCompressSync } from "node:zlib";
+import { Buffer } from "node:buffer";
 
 /**
  * Convert messages into markdown with compact JSON tool fences.
+ * Optionally compress tool call and tool result fences using Brotli.
  */
-export function messagesToMarkdown(messages: Array<CoreMessage>): string {
+export function messagesToMarkdown(messages: Array<CoreMessage>, compressed: boolean = true): string {
   let md = "";
 
   for (let msg of messages) {
@@ -27,12 +30,12 @@ export function messagesToMarkdown(messages: Array<CoreMessage>): string {
     }
 
     if (msg.role === "assistant") {
-      md += serializeAssistantParts(msg.content) + "\n\n";
+      md += serializeAssistantParts(msg.content, compressed) + "\n\n";
       continue;
     }
 
     if (msg.role === "tool") {
-      md += serializeToolResultParts(msg.content) + "\n\n";
+      md += serializeToolResultParts(msg.content, compressed) + "\n\n";
       continue;
     }
 
@@ -65,6 +68,7 @@ function serializeUserParts(parts: CoreUserMessage["content"]) {
 
 function serializeAssistantParts(
   parts: CoreAssistantMessage["content"],
+  compressed: boolean
 ): string {
   if (typeof parts === "string") {
     return parts;
@@ -74,13 +78,19 @@ function serializeAssistantParts(
     if (p.type === "text") {
       out += p.text;
     } else if (p.type === "tool-call") {
-      let payload = {
+      let payload: any = {
         toolCallId: p.toolCallId,
         toolName: p.toolName,
-        args: p.args,
       };
-      let json = JSON.stringify(payload);
-      out += fence("tool-call", json);
+      if (compressed) {
+        const argsJson = JSON.stringify(p.args);
+        const compressedArgs = brotliCompressSync(Buffer.from(argsJson, 'utf-8'));
+        payload.compressedArgs = compressedArgs.toString('base64');
+        out += fence("tool-call-compressed", JSON.stringify(payload));
+      } else {
+        payload.args = p.args;
+        out += fence("tool-call", JSON.stringify(payload));
+      }
     } else {
       shouldNeverHappen(
         `unsupported assistent message content part type ${p.type}`,
@@ -94,16 +104,22 @@ function serializeAssistantParts(
   return out;
 }
 
-function serializeToolResultParts(parts: Array<ToolResultPart>): string {
+function serializeToolResultParts(parts: Array<ToolResultPart>, compressed: boolean): string {
   let out = "";
   for (let p of parts) {
-    let payload = {
+    let payload: any = {
       toolCallId: p.toolCallId,
       toolName: p.toolName,
-      result: p.result,
     };
-    let json = JSON.stringify(payload);
-    out += fence("tool-result", json);
+    if (compressed) {
+      const resultJson = JSON.stringify(p.result);
+      const compressedResult = brotliCompressSync(Buffer.from(resultJson, 'utf-8'));
+      payload.compressedResult = compressedResult.toString('base64');
+      out += fence("tool-result-compressed", JSON.stringify(payload));
+    } else {
+      payload.result = p.result;
+      out += fence("tool-result", JSON.stringify(payload));
+    }
   }
   return out;
 }
