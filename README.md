@@ -198,12 +198,25 @@ await chat.run();
 
 https://github.com/user-attachments/assets/c114bf30-6642-4e4b-a037-24407a20894f
 
-Here are some best practices for an effective and efficient workflow with Markdown AI in VS Code:
+#### Configure the Editor
 
-- **Config File**  
-Create a basic `config.json` file with the editor command for VS Code: `{ "editor": "code --wait" }`.
-- **Split View**  
-Open the integrated terminal with `md-ai` on one side and your editor group on the other for a seamless workflow. You can move the terminal panel left or right to suit your preference.
+Set the editor command for VS Code via
+
+- **CLI flag**
+
+````bash
+md-ai -e 'code --wait' chat.md
+````
+
+- Or **Config File**
+```json
+{ "editor": "code --wait" }
+```
+
+**Split View:** Open the integrated terminal with `md-ai` on one side and your editor group on the other for a seamless workflow. You can move the terminal panel left or right to suit your preference.
+
+#### Recommended Shortcuts
+
 - **Symbol Search (`ctrl+shift+o`)**  
 Use symbol search to navigate long chat histories in the markdown chat file via the headings (## user, ## assistant, ## tool).
 - **Jump to End (`ctrl+end`)**  
@@ -218,8 +231,6 @@ Jump back to the editor. The markdown chat file is automatically focused, when o
 Quickly show and hide the terminal panel.
 - **Maximize Panel (`ctrl+shift+j`)**  
 Maximize the terminal panel for better visibility, e.g. while the LLM response is streamed.
-
-The keyboard shortcuts are just suggestions, you can configure them to suite your preference.
 
 ## License
 
