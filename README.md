@@ -196,7 +196,7 @@ await chat.run();
 
 ### VS Code
 
-https://github.com/user-attachments/assets/c114bf30-6642-4e4b-a037-24407a20894f
+![Markdown AI VS Code Demo](/assets/md-ai-vs-code-demo.webp)
 
 #### Configure the Editor
 
