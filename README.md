@@ -193,6 +193,46 @@ let chat = new MarkdownAI({
 await chat.run();
 ```
 
+## Editor Guides
+
+### VS Code
+
+![Markdown AI VS Code Demo](/assets/md-ai-vs-code-demo.webp)
+
+#### Configure the Editor
+
+Set the editor command for VS Code via
+
+- **CLI flag**
+
+````bash
+md-ai -e 'code --wait' chat.md
+````
+
+- Or **Config File**
+```json
+{ "editor": "code --wait" }
+```
+
+**Split View:** Open the integrated terminal with `md-ai` on one side and your editor group on the other for a seamless workflow. You can move the terminal panel left or right to suit your preference.
+
+#### Recommended Shortcuts
+
+- **Symbol Search (`ctrl+shift+o`)**  
+Use symbol search to navigate long chat histories in the markdown chat file via the headings (## user, ## assistant, ## tool).
+- **Jump to End (`ctrl+end`)**  
+Quickly jump to the end of the chat file to continue the conversation.
+- **Save (`ctrl+s`) and Close (`ctrl+w`) Editor**  
+Save and close the markdown chat file with your new prompt. This triggers the CLI to ask, if you want to call the LLM with the new chat file.
+- **Focus Terminal (`ctrl+alt+j`)**  
+Focus the terminal panel to interact with the CLI.
+- **Focus Editor (`ctrl+1`)**  
+Jump back to the editor. The markdown chat file is automatically focused, when opened via the CLI. The cursor is placed at the position you last put it before closing the file.
+- **Toggle Panel (`ctrl+j`)**  
+Quickly show and hide the terminal panel.
+- **Maximize Panel (`ctrl+shift+j`)**  
+Maximize the terminal panel for better visibility, e.g. while the LLM response is streamed.
+
 ## License
 
 MIT
