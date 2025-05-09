@@ -1,9 +1,9 @@
-export { MarkdownAI } from "./chat.js";
-export type { MarkdownAIOptions } from "./chat.js";
+export { MarkdownAI } from "./chat/chat.js";
+export type { MarkdownAIOptions } from "./chat/chat.js";
 
-import { markdownToMessages } from "./markdown-parse.js";
-import { messagesToMarkdown } from "./markdown-serialize.js";
-import { openInEditor } from "./editor.js";
+import { markdownToMessages } from "./markdown/parse.js";
+import { messagesToMarkdown } from "./markdown/serialize.js";
+import { openInEditor } from "./chat/editor.js";
 
 export const utils = {
   openInEditor,
@@ -15,10 +15,12 @@ import { createListFilesTool } from "./tools/list-files.js";
 import { createReadFilesTool } from "./tools/read-files.js";
 import { createWriteFilesTool } from "./tools/write-files.js";
 import { createGrepSearchTool } from "./tools/grep-search.js";
+import { createExecCommandTool } from "./tools/exec-command.js";
 
 export const tools = {
   createWriteFilesTool,
   createReadFilesTool,
   createListFilesTool,
   createGrepSearchTool,
+  createExecCommandTool,
 };

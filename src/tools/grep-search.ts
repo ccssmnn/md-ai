@@ -14,7 +14,6 @@ export function createGrepSearchTool(options: { cwd: string }) {
       query: z.string().describe("The search query (fixed string)"),
       patterns: z
         .array(z.string())
-        .default(["**/*"])
         .describe("Glob patterns to include in search"),
     }),
     execute: async ({ query, patterns }) => {

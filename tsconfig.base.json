@@ -14,6 +14,8 @@
     "module": "NodeNext",
     "sourceMap": true,
     "declaration": true,
+    "declarationMap": true,
+    "inlineSources": true,
     "lib": ["es2022"],
     "outDir": "lib"
   }

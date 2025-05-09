@@ -3,8 +3,8 @@ import { strict as assert } from "node:assert";
 
 import type { CoreMessage } from "ai";
 
-import { markdownToMessages } from "./markdown-parse.js";
-import { messagesToMarkdown } from "./markdown-serialize.js";
+import { markdownToMessages } from "../../src/markdown/parse.js";
+import { messagesToMarkdown } from "../../src/markdown/serialize.js";
 
 test("roundtrip markdown serialization and parsing", async (t) => {
   let testCases: Array<{ name: string; messages: CoreMessage[] }> = [

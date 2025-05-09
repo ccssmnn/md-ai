@@ -1,127 +1,128 @@
 # Markdown AI
 
+[![npm version](https://img.shields.io/npm/v/@ccssmnn/md-ai.svg)](https://www.npmjs.com/package/@ccssmnn/md-ai) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
 A command-line tool and library for agentic coding using markdown in your own `$EDITOR`.
+
+---
+
+Markdown AI enables seamless interaction with large language models (LLMs) directly from your terminal and favorite editor, using markdown for storing the chat.
 
 ## Why does this exist?
 
-My opinions:
-
-- LLM Chat Editing experience in web and editor UIs is bad
-- Editing files experience in _my editor_ is good
-- LLMs respond in markdown anyway
-- Markdown in editors comes with syntax highlighting for free
-- Lives on my machine, uses my API keys, can use my tools
+- LLM chat editing experience in web and editor UIs is bad.
+- Editing files in _your_ editor is good.
+- LLMs naturally respond in markdown.
+- Markdown editors come with syntax highlighting and rich editing features.
+- Runs locally on your machine, uses your API keys, and can leverage local tools.
 
 ## Features
 
-- The entire chat is stored as a single markdown file, including tool calls.
+- Entire chat history stored as a single markdown file.
 - Chat with the LLM in the terminal.
-- Open your editor from the CLI to edit the entire chat history, continue after the editor is closed.
-- Built in tools for listing, reading, searching and writing files. Asks for permission when writing.
-- Provide a custom system prompt.
-- Library mode allows you to provide a custom model and custom tools and plug MCP servers via [MCP Tools](https://ai-sdk.dev/docs/ai-sdk-core/tools-and-tool-calling#mcp-tools).
+- Open your editor from the CLI to edit the entire chat history and continue after closing the editor.
+- Built-in tools for listing, reading, searching, and writing files, with permission prompts for writing.
+- Support for custom system prompts.
+- Library mode for custom models, tools, and integration with MCP servers via [MCP Tools](https://ai-sdk.dev/docs/ai-sdk-core/tools-and-tool-calling#mcp-tools).
 
-## Installation
-
-Install as a library:
-
-```bash
-npm install @ccssmnn/md-ai
-```
-
-Install CLI globally:
+## Getting Started
 
 ```bash
 npm install -g @ccssmnn/md-ai
 ```
 
-## How does this work?
+Set your API key (example for Google Generative AI):
 
-At the core the chat is serialized into markdown after each AI invocation.
-You can read and edit the markdown and it will be parsed into messages before sent to the AI.
-Example:
-
-```
-## User
-
-call the tool for me
-
-## Assistant
-
-will do!
-
-\`\`\`tool-call
-{
-  "toolCallId": "1234",
-  "toolName": "myTool",
-  "args": {
-    "msg": "hello tool"
-  }
-}
-\`\`\`
-
-## Tool
-
-
-\`\`\`tool-result
-{
-  "toolCallId": "1234",
-  "toolName": "myTool",
-  "result": {
-    "response": "hello agent"
-  }
-}
-\`\`\`
+```bash
+export GOOGLE_GENERATIVE_AI_API_KEY=your_api_key
 ```
 
-Will be parsed into
+Start a chat session:
 
-```typescript
-import type { CoreMessage } from "ai";
-
-let messages: Array<CoreMessage> = [
-  {
-    role: "user",
-    content: "call the tool for me",
-  },
-  {
-    role: "assistant",
-    content: [
-      { type: "text", text: "will do!" },
-      {
-        type: "tool-call",
-        toolCallId: "1234",
-        toolName: "myTool",
-        args: { msg: "hello tool" },
-      },
-    ],
-  },
-  {
-    role: "tool",
-    content: [
-      {
-        type: "tool-result",
-        toolCallId: "1234",
-        toolName: "myTool",
-        result: { response: "hello agent" },
-      },
-    ],
-  },
-];
+```bash
+md-ai chat.md
 ```
 
-## Configuration File
+## Usage
 
-Markdown AI supports loading configuration from a `config.json` file. By default, it looks for a config file at `~/.config/md-ai/config.json`. You can specify a custom config file path using the `--config` flag.
+### CLI
 
-CLI flags take precedence over settings in the configuration file. If a setting is provided both via a flag and in the config file, the flag's value will be used.
+```bash
+md-ai <chat.md> [options]
+```
 
-The `config.json` file is a simple JSON object with the following optional keys:
+Options:
 
-- `model`: Specifies the default AI model (e.g., `"google:gemini-2.0-flash"`).
-- `system`: Specifies the path to a default system prompt file.
-- `editor`: Specifies the default editor command.
-- `compression`: Boolean to enable/disable compression for tool call/result fences.
+- `--config <path>` Custom config file path.
+- `--show-config` Show the final configuration.
+- `-s, --system <path>` Path to system prompt file.
+- `-m, --model <provider:model>` AI model to use (default: google:gemini-2.0-flash).
+- `-e, --editor <cmd>` Editor command (default: $EDITOR or 'vi +99999').
+- `-c, --cwd <path>` Working directory for file tools.
+- `--no-tools` Disable all tools (pure chat mode).
+- `--no-compression` Disable compression for tool call/result fences.
+
+### Editor
+
+#### VS Code
+
+![Markdown AI VS Code Demo](/assets/md-ai-vs-code-demo.webp)
+
+Set the editor command:
+
+```bash
+md-ai -e 'code --wait' chat.md
+```
+
+Or in config file:
+
+```json
+{ "editor": "code --wait" }
+```
+
+Recommended Shortcuts:
+
+- **Symbol Search (`ctrl+shift+o`)**: Navigate chat history via headings.
+- **Jump to End (`ctrl+end`)**: Quickly jump to the end of the chat.
+- **Save (`ctrl+s`) and Close (`ctrl+w`)**: Save and close the chat file to trigger the AI call.
+- **Focus Terminal (`ctrl+alt+j`)**: Focus terminal panel.
+- **Focus Editor (`ctrl+1`)**: Jump back to editor.
+- **Toggle Panel (`ctrl+j`)**: Show/hide terminal panel.
+- **Maximize Panel (`ctrl+shift+j`)**: Maximize terminal panel.
+
+### Library
+
+Use as a library with custom tools and models:
+
+```javascript
+import { google } from "@ai-sdk/google";
+import { MarkdownAI, tools } from "@ccssmnn/md-ai";
+
+let chat = new MarkdownAI({
+  path: "./chat.md",
+  editor: "code --wait",
+  ai: {
+    model: google("gemini-2.0-flash"),
+    system: "You are a helpful assistant.",
+    tools: {
+      readFiles: tools.createReadFilesTool({ cwd: "./" }),
+      listFiles: tools.createListFilesTool({ cwd: "./" }),
+      writeFiles: tools.createWriteFilesTool({ cwd: "./" }),
+      grepSearch: tools.createGrepSearchTool({ cwd: "./" }),
+      execCommand: tools.createExecCommandTool({
+        cwd: "./",
+        session: { alwaysAllow: new Set() },
+      }),
+    },
+  },
+});
+
+await chat.run();
+```
+
+## Configuration
+
+Markdown AI supports a `config.json` file (default location: `~/.config/md-ai/config.json`). CLI flags override config file settings.
 
 Example `config.json`:
 
@@ -133,104 +134,41 @@ Example `config.json`:
 }
 ```
 
-## Command-line Usage
+## How does it work?
 
-```bash
-export GOOGLE_GENERATIVE_AI_API_KEY=your_api_key
+The chat is serialized into markdown after each AI invocation. You can edit the markdown file directly, and it will be parsed into messages before sending to the AI.
+
+Example markdown chat snippet:
+
+```markdown
+## User
+
+call the tool for me
+
+## Assistant
+
+will do!
+
+\`\`\`tool-call
+{
+"toolCallId": "1234",
+"toolName": "myTool",
+"args": { "msg": "hello tool" }
+}
+\`\`\`
+
+## Tool
+
+\`\`\`tool-result
+{
+"toolCallId": "1234",
+"toolName": "myTool",
+"result": { "response": "hello agent" }
+}
+\`\`\`
 ```
 
-Run the Markdown AI CLI:
-
-```bash
-md-ai <chat.md> [options]
-```
-
-Examples:
-
-```bash
-md-ai chat.md --system system.md --model google:gemini-2.0-flash
-md-ai chat.md --model openai:gpt-4o --cwd ./apps/www
-```
-
-Options:
-
-- `--config <path>` Custom config file path. Defaults to `~/.config/md-ai/config.json`. CLI flags take precedence over config file settings.
-- `--show-config` Log the final configuration being used.
-- `-s, --system <path>` Path to a file containing a system prompt.
-- `-m, --model <provider:model>` Provider and model to use (default: google:gemini-2.0-flash).
-- `-e, --editor <cmd>` Editor command (default: $EDITOR or 'vi +99999').
-- `-c, --cwd <path>` Working directory for file tools (default: current working directory).
-- `--no-tools` Disable all tools (list, read, write, grep) (pure chat mode)
-- `--no-compression` Disable compression for tool call/result fences
-
-## Library Usage
-
-The package can also be used as a library in your own script.
-By using `MarkdownAI` this way, you can provide custom tools and model:
-
-```javascript
-import { google } from "@ai-sdk/google";
-import { MarkdownAI, tools } from "@ccssmnn/md-ai";
-
-let chat = new MarkdownAI({
-  path: "./chat.md",
-  editor: "code --wait",
-  ai: {
-    // these are forwarded to the "ai" `steamText` call
-    model: google("gemini-2.0-flash"),
-    system: "You are a helpful assistant.",
-    tools: {
-      readFiles: tools.createReadFilesTool({ cwd: "./" }),
-      listFiles: tools.createListFilesTool({ cwd: "./" }),
-      writeFiles: tools.createWriteFilesTool({ cwd: "./" }),
-      grepSearch: tools.createGrepSearchTool({ cwd: "./" }),
-      // your custom tools
-    },
-  },
-});
-
-await chat.run();
-```
-
-## Editor Guides
-
-### VS Code
-
-![Markdown AI VS Code Demo](/assets/md-ai-vs-code-demo.webp)
-
-#### Configure the Editor
-
-Set the editor command for VS Code via
-
-- **CLI flag**
-
-````bash
-md-ai -e 'code --wait' chat.md
-````
-
-- Or **Config File**
-```json
-{ "editor": "code --wait" }
-```
-
-**Split View:** Open the integrated terminal with `md-ai` on one side and your editor group on the other for a seamless workflow. You can move the terminal panel left or right to suit your preference.
-
-#### Recommended Shortcuts
-
-- **Symbol Search (`ctrl+shift+o`)**  
-Use symbol search to navigate long chat histories in the markdown chat file via the headings (## user, ## assistant, ## tool).
-- **Jump to End (`ctrl+end`)**  
-Quickly jump to the end of the chat file to continue the conversation.
-- **Save (`ctrl+s`) and Close (`ctrl+w`) Editor**  
-Save and close the markdown chat file with your new prompt. This triggers the CLI to ask, if you want to call the LLM with the new chat file.
-- **Focus Terminal (`ctrl+alt+j`)**  
-Focus the terminal panel to interact with the CLI.
-- **Focus Editor (`ctrl+1`)**  
-Jump back to the editor. The markdown chat file is automatically focused, when opened via the CLI. The cursor is placed at the position you last put it before closing the file.
-- **Toggle Panel (`ctrl+j`)**  
-Quickly show and hide the terminal panel.
-- **Maximize Panel (`ctrl+shift+j`)**  
-Maximize the terminal panel for better visibility, e.g. while the LLM response is streamed.
+This is parsed into structured messages for the AI.
 
 ## License
 

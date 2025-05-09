@@ -5,7 +5,7 @@ import type {
   CoreUserMessage,
 } from "ai";
 
-import { shouldNeverHappen } from "./utils.js";
+import { shouldNeverHappen } from "../utils/index.js";
 import { brotliCompressSync } from "node:zlib";
 import { Buffer } from "node:buffer";
 
