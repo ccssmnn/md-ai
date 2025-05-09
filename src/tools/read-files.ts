@@ -4,7 +4,7 @@ import { z } from "zod";
 import { tool } from "ai";
 import { log } from "@clack/prompts";
 
-import { tryCatch } from "../utils.js";
+import { tryCatch } from "../utils/index.js";
 import { ensureProjectPath, globFiles } from "./_shared.js";
 
 export function createReadFilesTool(options: { cwd: string }) {

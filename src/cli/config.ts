@@ -1,7 +1,7 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { z } from "zod";
-import { tryCatch } from "./utils.js";
+import { tryCatch } from "../utils/index.js";
 import { readFile } from "node:fs/promises";
 import { log } from "@clack/prompts";
 

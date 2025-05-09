@@ -28,13 +28,12 @@ Examples:
 `,
     parameters: execCommandParameters,
     execute: async ({ command, arguments: args, timeout, explanation }) => {
-      // Check session allow-list
       let sessionKey = `${command} ${args.join(" ")}`;
       if (options.session.alwaysAllow.has(sessionKey)) {
         return await runCommand(command, args, options.cwd, timeout);
       }
 
-      log.warning(
+      log.info(
         `exec-command: the model wants to run:
 \t$ ${command} ${args.join(" ")}
 
@@ -127,9 +126,7 @@ async function runCommand(
       if (!finished) {
         finished = true;
         clearTimeout(timer);
-        log.warning(
-          `exec-command: command finished with exit code ${code ?? 0}`,
-        );
+        log.info(`exec-command: command finished with exit code ${code ?? 0}`);
         resolve({
           ok: true,
           stdout: stdout + (stderr ? `\n[stderr]\n${stderr}` : ""),

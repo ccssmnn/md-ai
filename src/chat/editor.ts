@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
 import { stdin } from "node:process";
 
-import { shouldNeverHappen } from "./utils.js";
+import { shouldNeverHappen } from "../utils/index.js";
 
 /**
  * Launch an external editor and wait for it to exit.

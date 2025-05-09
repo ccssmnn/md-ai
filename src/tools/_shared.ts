@@ -3,7 +3,7 @@ import { stat, readFile } from "node:fs/promises";
 
 import { glob } from "glob";
 
-import { tryCatch } from "../utils.js";
+import { tryCatch } from "../utils/index.js";
 
 export function ensureProjectPath(projectRoot: string, rel: string): string {
   let abs = isAbsolute(rel) ? rel : resolve(projectRoot, rel);

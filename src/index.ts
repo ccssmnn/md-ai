@@ -1,9 +1,9 @@
-export { MarkdownAI } from "./chat.js";
-export type { MarkdownAIOptions } from "./chat.js";
+export { MarkdownAI } from "./chat/chat.js";
+export type { MarkdownAIOptions } from "./chat/chat.js";
 
-import { markdownToMessages } from "./markdown-parse.js";
-import { messagesToMarkdown } from "./markdown-serialize.js";
-import { openInEditor } from "./editor.js";
+import { markdownToMessages } from "./markdown/parse.js";
+import { messagesToMarkdown } from "./markdown/serialize.js";
+import { openInEditor } from "./chat/editor.js";
 
 export const utils = {
   openInEditor,

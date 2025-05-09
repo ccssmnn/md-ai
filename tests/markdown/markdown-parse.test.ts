@@ -1,7 +1,7 @@
 import type { CoreMessage } from "ai";
 import test from "node:test";
 import assert from "node:assert";
-import { markdownToMessages } from "./markdown-parse.js";
+import { markdownToMessages } from "../../src/markdown/parse.js";
 
 test("markdownToMessages", async (t) => {
   await t.test("should ignore content before the first heading", () => {

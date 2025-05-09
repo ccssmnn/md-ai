@@ -1,7 +1,7 @@
 import assert from "node:assert";
 import test from "node:test";
 
-import { parseGitignore } from "./_shared.js";
+import { parseGitignore } from "../../src/tools/_shared.js";
 
 test("tools: _shared: parseGitignore", async (t) => {
   await t.test("should return an empty array for empty content", () => {

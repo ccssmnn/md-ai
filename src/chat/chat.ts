@@ -3,17 +3,9 @@ import { appendFile, readFile, writeFile } from "node:fs/promises";
 import { streamText } from "ai";
 import type { CoreMessage } from "ai";
 
-import { markdownToMessages } from "./markdown-parse.js";
-import { messagesToMarkdown } from "./markdown-serialize.js";
-import {
-  confirm,
-  isCancel,
-  log,
-  select,
-  spinner,
-  stream,
-  text,
-} from "@clack/prompts";
+import { markdownToMessages } from "../markdown/parse.js";
+import { messagesToMarkdown } from "../markdown/serialize.js";
+import { isCancel, log, select, spinner, stream, text } from "@clack/prompts";
 import { openInEditor } from "./editor.js";
 
 /** Options for configuring a markdown-backed ai session */
@@ -80,16 +72,15 @@ export class MarkdownAI {
       ] as const,
       initialValue: "open-editor" as const,
     });
-    if (isCancel(shouldOpenEditor)) {
-      return false;
-    }
-    if (shouldOpenEditor === "stop") {
-      return false;
-    }
+    if (isCancel(shouldOpenEditor)) return false;
+
+    if (shouldOpenEditor === "stop") return false;
+
     if (shouldOpenEditor === "open-editor") {
       await openInEditor(this.editor, this.chatPath);
       return true;
     }
+
     if (shouldOpenEditor === "prompt-directly") {
       let message = await text({
         message: "Your message:",
@@ -99,6 +90,7 @@ export class MarkdownAI {
       await appendFile(this.chatPath, message);
       return true;
     }
+
     shouldOpenEditor satisfies never;
     return false;
   }
@@ -107,31 +99,28 @@ export class MarkdownAI {
     messages: CoreMessage[],
     skipConfirm = false,
   ): Promise<boolean> {
-    if (!skipConfirm) {
-      let action = await select({
-        message: "AI's turn. What do you want to do?",
-        options: [
-          { value: "call-llm", label: "Call the LLM" },
-          { value: "open-editor", label: `Open the editor '${this.editor}'` },
-          { value: "stop", label: "Stop" },
-        ] as const,
-        initialValue: "call-llm" as const,
-      });
+    let action = skipConfirm
+      ? "call-llm"
+      : await select({
+          message: "AI's turn. What do you want to do?",
+          options: [
+            { value: "call-llm", label: "Call the LLM" },
+            { value: "open-editor", label: `Open the editor '${this.editor}'` },
+            { value: "stop", label: "Stop" },
+          ] as const,
+          initialValue: "call-llm" as const,
+        });
 
-      if (isCancel(action)) {
-        return false;
-      }
+    if (isCancel(action)) return false;
 
-      if (action === "stop") {
-        return false;
-      }
+    if (action === "stop") return false;
 
-      if (action === "open-editor") {
-        await openInEditor(this.editor, this.chatPath);
-        // After editing, return true to let the main loop re-evaluate the next turn
-        return true;
-      }
+    if (action === "open-editor") {
+      await openInEditor(this.editor, this.chatPath);
+      return true;
     }
+
+    action satisfies "call-llm";
 
     let msgs = [...messages];
     if (this.ai.system) {
@@ -146,7 +135,7 @@ export class MarkdownAI {
 
     // show spinner while waiting for model to start streaming
     let spin = spinner();
-    spin.start("Thinking...");
+    spin.start("Waiting for response...");
     let { textStream, response } = streamText({
       ...requestOptions,
       onError: ({ error }) => log.error(`⚠️ streamText error: ${error}`),
@@ -222,14 +211,8 @@ function determineNextTurn(chat: CoreMessage[]): NextTurn {
 }
 
 let systemPrompt = `
-You are operating as Markdown-AI, an agentic coding assistant that lives in the terminal.
-It offers interacting with LLMs in the terminal combined with the users editor of choice.
-You are expected to be helpful and precise.
+You are Markdown-AI, a terse, agentic coding assistant operating in the terminal with access to the user's editor and project files.
 
-You can:
-- Receive user prompts, project context and files.
-- Stream responses and emit tool calls: (e.g. list, read and manipulate files)
-- Write code via tool calls.
+You proactively and autonomously use all available tools to explore the project and gather necessary context. Do not ask the user which files to inspect or whether to update files or run commands; user confirmations are handled by the tool implementations.
 
-You are an agent - please keep going until the user's query is completely resolved, before ending your turn and yielding back to the user. Only terminate your turn when you are sure that the problem is solved. If you are not sure about file content or codebase structure pertaining to the user's request, use your tools to read files and gather the relevant information: do NOT guess or make up an answer.
-`;
+Be precise and concise. Keep working until the user's request is fully resolved before ending your turn using the tools available. If unsure about project details, use your tools to investigate—do not guess or fabricate information.`;

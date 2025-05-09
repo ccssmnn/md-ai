@@ -1,7 +1,7 @@
 import assert from "node:assert";
 import test from "node:test";
 
-import { applyPatchToString } from "./write-files.js";
+import { applyPatchToString } from "../../src/tools/write-files.js";
 
 test("tools: write-files: applyPatchToString", async (t) => {
   await t.test(

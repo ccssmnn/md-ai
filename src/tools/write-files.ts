@@ -14,7 +14,7 @@ import { isCancel, log, multiselect, select } from "@clack/prompts";
 import type { MultiSelectOptions } from "@clack/prompts";
 
 import { ensureProjectPath } from "./_shared.js";
-import { shouldNeverHappen, tryCatch } from "../utils.js";
+import { shouldNeverHappen, tryCatch } from "../utils/index.js";
 
 export function createWriteFilesTool(options: { cwd: string }) {
   return tool({

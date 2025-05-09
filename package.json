@@ -39,11 +39,11 @@
     "check-types": "tsc --noEmit -p tsconfig.json",
     "check-exports": "attw --pack . --ignore-rules=cjs-resolves-to-esm",
     "check-format": "prettier --check .",
-    "check-tests": "tsx --test src/*.test.ts src/**/*.test.ts",
+    "check-tests": "tsx --test tests/**/*.test.ts",
     "ci": "pnpm build && pnpm check-tests && pnpm check-format && pnpm check-exports"
   },
   "bin": {
-    "md-ai": "./lib/cli.js"
+    "md-ai": "./lib/cli/cli.js"
   },
   "main": "./lib/index.js",
   "types": "./lib/index.d.ts",
