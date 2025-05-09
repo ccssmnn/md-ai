@@ -15,10 +15,12 @@ import { createListFilesTool } from "./tools/list-files.js";
 import { createReadFilesTool } from "./tools/read-files.js";
 import { createWriteFilesTool } from "./tools/write-files.js";
 import { createGrepSearchTool } from "./tools/grep-search.js";
+import { createExecCommandTool } from "./tools/exec-command.js";
 
 export const tools = {
   createWriteFilesTool,
   createReadFilesTool,
   createListFilesTool,
   createGrepSearchTool,
+  createExecCommandTool,
 };
