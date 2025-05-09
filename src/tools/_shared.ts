@@ -41,19 +41,36 @@ async function getIgnorePatterns(projectRoot: string): Promise<string[]> {
   if (cachedIgnore && cachedMtime === mtime) return cachedIgnore;
 
   let readRes = await tryCatch(readFile(gitignorePath, { encoding: "utf-8" }));
-  let patterns: string[] = readRes.ok
-    ? readRes.data
-        .split(/\r?\n/)
-        .map((l) => l.trim())
-        .filter((l) => l && !l.startsWith("#"))
-        .map((p) => {
-          if (p.endsWith("/")) return `${p}**`;
-          if (!p.includes("*") && !p.includes("?")) return p;
-          return p;
-        })
-    : [];
+  let patterns = readRes.ok ? parseGitignore(readRes.data) : [];
   patterns.push(".git/**");
   cachedIgnore = patterns;
   cachedMtime = mtime;
   return patterns;
+}
+
+function parseGitignore(content: string): Array<string> {
+  return content
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line && !line.startsWith("#"))
+    .flatMap((raw) => {
+      let isNeg = raw.startsWith("!");
+      let pat = isNeg ? raw.slice(1) : raw;
+      let anchored = pat.startsWith("/");
+      if (anchored) pat = pat.slice(1);
+
+      let isDirRule =
+        pat.endsWith("/") || (!pat.includes("*") && !pat.includes("."));
+      if (isDirRule) pat = pat.replace(/\/$/, "");
+
+      let base = anchored ? pat : `**/${pat}`;
+
+      if (isDirRule) {
+        let dirPatterns = [`${base}`, `${base}/**`];
+        return isNeg ? dirPatterns.map((p) => `!${p}`) : dirPatterns;
+      }
+
+      let filePattern = anchored ? pat : `**/${pat}`;
+      return [isNeg ? `!${filePattern}` : filePattern];
+    });
 }
