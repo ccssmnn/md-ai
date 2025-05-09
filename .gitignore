@@ -3,6 +3,7 @@ lib
 
 .env
 .env.local
+.DS_Store
 
 system.md
 chat.md
