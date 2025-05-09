@@ -160,7 +160,7 @@ Options:
 - `-m, --model <provider:model>` Provider and model to use (default: google:gemini-2.0-flash).
 - `-e, --editor <cmd>` Editor command (default: $EDITOR or 'vi +99999').
 - `-c, --cwd <path>` Working directory for file tools (default: current working directory).
-- `--no-tools` Disable all tools (list, read, write, grep) (pure chat mode)
+- `--no-tools` Disable all tools (pure chat mode)
 - `--no-compression` Disable compression for tool call/result fences
 
 ## Library Usage
@@ -184,6 +184,7 @@ let chat = new MarkdownAI({
       listFiles: tools.createListFilesTool({ cwd: "./" }),
       writeFiles: tools.createWriteFilesTool({ cwd: "./" }),
       grepSearch: tools.createGrepSearchTool({ cwd: "./" }),
+      execCommand: tools.createExecCommandTool({ cwd: "./", session: { alwaysAllow: new Set() } }),
       // your custom tools
     },
   },

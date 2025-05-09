@@ -28,17 +28,18 @@ Examples:
 `,
     parameters: execCommandParameters,
     execute: async ({ command, arguments: args, timeout, explanation }) => {
-      log.step(
-        `exec-command: the model wants to run: \n  $ ${command} ${args.join(" ")}`,
-      );
-      log.info(`Reason: ${explanation}`);
-
       // Check session allow-list
       let sessionKey = `${command} ${args.join(" ")}`;
       if (options.session.alwaysAllow.has(sessionKey)) {
         return await runCommand(command, args, options.cwd, timeout);
       }
 
+      log.warning(
+        `exec-command: the model wants to run:
+\t$ ${command} ${args.join(" ")}
+
+Explanation: ${explanation}`,
+      );
       let userChoice = await select({
         message: `Allow running this command?`,
         options: [
@@ -91,6 +92,7 @@ async function runCommand(
   | { ok: false; error: string; code?: number }
 > {
   return new Promise((resolve) => {
+    log.info(`exec-command: executing '${command} ${args.join(" ")}'`);
     let proc = spawn(command, args, { cwd, shell: true });
     let stdout = "";
     let stderr = "";
@@ -99,6 +101,7 @@ async function runCommand(
       if (!finished) {
         finished = true;
         proc.kill("SIGKILL");
+        log.warning(`exec-command: command timed out after ${timeout}s`);
         resolve({
           ok: false,
           error: `Command timed out after ${timeout}s`,
@@ -116,6 +119,7 @@ async function runCommand(
       if (!finished) {
         finished = true;
         clearTimeout(timer);
+        log.warning(`exec-command: command error'd: ${err.message}`);
         resolve({ ok: false, error: err.message });
       }
     });
@@ -123,6 +127,9 @@ async function runCommand(
       if (!finished) {
         finished = true;
         clearTimeout(timer);
+        log.warning(
+          `exec-command: command finished with exit code ${code ?? 0}`,
+        );
         resolve({
           ok: true,
           stdout: stdout + (stderr ? `\n[stderr]\n${stderr}` : ""),
