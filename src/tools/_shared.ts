@@ -48,7 +48,7 @@ async function getIgnorePatterns(projectRoot: string): Promise<string[]> {
   return patterns;
 }
 
-function parseGitignore(content: string): Array<string> {
+export function parseGitignore(content: string): Array<string> {
   return content
     .split(/\r?\n/)
     .map((line) => line.trim())
