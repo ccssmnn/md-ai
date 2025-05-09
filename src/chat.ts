@@ -108,8 +108,29 @@ export class MarkdownAI {
     skipConfirm = false,
   ): Promise<boolean> {
     if (!skipConfirm) {
-      let check = await confirm({ message: "Call the LLM?" });
-      if (check !== true) return false;
+      let action = await select({
+        message: "AI's turn. What do you want to do?",
+        options: [
+          { value: "call-llm", label: "Call the LLM" },
+          { value: "open-editor", label: `Open the editor '${this.editor}'` },
+          { value: "stop", label: "Stop" },
+        ] as const,
+        initialValue: "call-llm" as const,
+      });
+
+      if (isCancel(action)) {
+        return false;
+      }
+
+      if (action === "stop") {
+        return false;
+      }
+
+      if (action === "open-editor") {
+        await openInEditor(this.editor, this.chatPath);
+        // After editing, return true to let the main loop re-evaluate the next turn
+        return true;
+      }
     }
 
     let msgs = [...messages];
