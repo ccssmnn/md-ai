@@ -86,10 +86,8 @@ function serializeAssistantParts(
         toolName: p.toolName,
       };
       if (compressed) {
-        const argsJson = JSON.stringify(p.args);
-        const compressedArgs = brotliCompressSync(
-          Buffer.from(argsJson, "utf-8"),
-        );
+        let argsJson = JSON.stringify(p.args);
+        let compressedArgs = brotliCompressSync(Buffer.from(argsJson, "utf-8"));
         payload.compressedArgs = compressedArgs.toString("base64");
         out += fence("tool-call-compressed", JSON.stringify(payload));
       } else {
@@ -120,8 +118,8 @@ function serializeToolResultParts(
       toolName: p.toolName,
     };
     if (compressed) {
-      const resultJson = JSON.stringify(p.result);
-      const compressedResult = brotliCompressSync(
+      let resultJson = JSON.stringify(p.result);
+      let compressedResult = brotliCompressSync(
         Buffer.from(resultJson, "utf-8"),
       );
       payload.compressedResult = compressedResult.toString("base64");
