@@ -16,167 +16,166 @@ export interface MarkdownAIOptions {
   editor: string;
   /** Enables compression of args and results in tool fences in the markdown, defaults to true */
   withCompression?: boolean;
-
   /** arguments that will be forwarded to the ai sdk `streamText` call */
   ai: AISDKArgs;
 }
 
-/** A class for managing markdown-based chat sessions with a language model */
-export class MarkdownAI {
-  editor: string;
-  chatPath: string;
-  ai: AISDKArgs;
-  withCompression: boolean | undefined;
-
-  constructor(options: MarkdownAIOptions) {
-    this.chatPath = options.path;
-    this.editor = options.editor;
-    this.ai = options.ai;
-    this.withCompression = options.withCompression ?? true;
-  }
-
-  /** runs the main chat loop */
-  async run(): Promise<void> {
-    let proceed = true;
-    while (proceed) {
-      let messages = await this.readAndParseChatFile();
-      let nextTurn = determineNextTurn(messages);
-      if (nextTurn.role === "user") {
-        proceed = await this.performUserTurn(nextTurn.addHeading);
-        continue;
-      }
-      if (nextTurn.role === "assistant") {
-        proceed = await this.performAITurn(messages, nextTurn.skipConfirm);
-        continue;
-      }
-      nextTurn satisfies never;
-    }
-  }
-
-  private async performUserTurn(addHeading = false): Promise<boolean> {
-    if (addHeading) {
-      await appendFile(this.chatPath, "\n## user\n");
-    }
-    let shouldOpenEditor = await select({
-      message: "Your turn. What do you want to do?",
-      options: [
-        {
-          value: "open-editor",
-          label: `Open the editor '${this.editor}'`,
-        },
-        {
-          value: "prompt-directly",
-          label: "Write my message in the CLI",
-        },
-        { value: "stop", label: "Stop" },
-      ] as const,
-      initialValue: "open-editor" as const,
-    });
-    if (isCancel(shouldOpenEditor)) return false;
-
-    if (shouldOpenEditor === "stop") return false;
-
-    if (shouldOpenEditor === "open-editor") {
-      await openInEditor(this.editor, this.chatPath);
-      return true;
-    }
-
-    if (shouldOpenEditor === "prompt-directly") {
-      let message = await text({
-        message: "Your message:",
-        placeholder: "...",
+/** starts the markdown ai cli loop until the user stops it */
+export async function runMarkdownAI(options: MarkdownAIOptions) {
+  let proceed = true;
+  while (proceed) {
+    let messages = await readAndParseChatFile(options.path);
+    let nextTurn = determineNextTurn(messages);
+    if (nextTurn.role === "user") {
+      proceed = await performUserTurn({
+        ...options,
+        addHeading: nextTurn.addHeading,
       });
-      if (isCancel(message)) return true;
-      await appendFile(this.chatPath, message);
-      return true;
+      continue;
     }
-
-    shouldOpenEditor satisfies never;
-    return false;
+    if (nextTurn.role === "assistant") {
+      proceed = await performAITurn(messages, {
+        ...options,
+        skipConfirm: nextTurn.skipConfirm,
+      });
+      continue;
+    }
+    nextTurn satisfies never;
   }
+}
 
-  private async performAITurn(
-    messages: CoreMessage[],
-    skipConfirm = false,
-  ): Promise<boolean> {
-    let action = skipConfirm
-      ? "call-llm"
-      : await select({
-          message: "AI's turn. What do you want to do?",
-          options: [
-            { value: "call-llm", label: "Call the LLM" },
-            { value: "open-editor", label: `Open the editor '${this.editor}'` },
-            { value: "stop", label: "Stop" },
-          ] as const,
-          initialValue: "call-llm" as const,
-        });
+/** A class for managing markdown-based chat sessions with a language model */
+async function performUserTurn(
+  options: MarkdownAIOptions & { addHeading: boolean },
+): Promise<boolean> {
+  if (options.addHeading) {
+    await appendFile(options.path, "\n## user\n");
+  }
+  let shouldOpenEditor = await select({
+    message: "Your turn. What do you want to do?",
+    options: [
+      {
+        value: "open-editor",
+        label: `Open the editor '${options.editor}'`,
+      },
+      {
+        value: "prompt-directly",
+        label: "Write my message in the CLI",
+      },
+      { value: "stop", label: "Stop" },
+    ] as const,
+    initialValue: "open-editor" as const,
+  });
+  if (isCancel(shouldOpenEditor)) return false;
 
-    if (isCancel(action)) return false;
+  if (shouldOpenEditor === "stop") return false;
 
-    if (action === "stop") return false;
-
-    if (action === "open-editor") {
-      await openInEditor(this.editor, this.chatPath);
-      return true;
-    }
-
-    action satisfies "call-llm";
-
-    let msgs = [...messages];
-    if (this.ai.system) {
-      msgs.unshift({ role: "system", content: this.ai.system });
-    }
-
-    let requestOptions = {
-      ...this.ai,
-      system: systemPrompt,
-      messages: msgs,
-    };
-
-    // show spinner while waiting for model to start streaming
-    let spin = spinner();
-    spin.start("Waiting for response...");
-    let { textStream, response } = streamText({
-      ...requestOptions,
-      onError: ({ error }) => log.error(`⚠️ streamText error: ${error}`),
-    });
-
-    // stop spinner on first token and forward all chunks
-    let interceptedStream = (async function* () {
-      let first = true;
-      for await (let chunk of textStream) {
-        if (first) {
-          spin.stop();
-          first = false;
-        }
-        yield chunk;
-      }
-    })();
-
-    // ensure spinner is stopped even if no tokens were streamed
-    try {
-      await stream.message(interceptedStream);
-    } finally {
-      spin.stop();
-    }
-
-    let responseMessages = (await response).messages;
-
-    await this.writeChatFile([...messages, ...responseMessages]);
-
+  if (shouldOpenEditor === "open-editor") {
+    await openInEditor(options.editor, options.path);
     return true;
   }
 
-  private async readAndParseChatFile(): Promise<CoreMessage[]> {
-    let chatFileContent = await readFile(this.chatPath, { encoding: "utf-8" });
-    let messages = markdownToMessages(chatFileContent);
-    return messages;
+  if (shouldOpenEditor === "prompt-directly") {
+    let message = await text({
+      message: "Your message:",
+      placeholder: "...",
+    });
+    if (isCancel(message)) return true;
+    await appendFile(options.path, message);
+    return true;
   }
 
-  private async writeChatFile(messages: CoreMessage[]): Promise<void> {
-    let content = messagesToMarkdown(messages, this.withCompression);
-    await writeFile(this.chatPath, content, { encoding: "utf-8" });
+  shouldOpenEditor satisfies never;
+  return false;
+}
+
+async function performAITurn(
+  messages: CoreMessage[],
+  options: MarkdownAIOptions & { skipConfirm: boolean },
+): Promise<boolean> {
+  let action = options.skipConfirm
+    ? "call-llm"
+    : await select({
+        message: "AI's turn. What do you want to do?",
+        options: [
+          { value: "call-llm", label: "Call the LLM" },
+          {
+            value: "open-editor",
+            label: `Open the editor '${options.editor}'`,
+          },
+          { value: "stop", label: "Stop" },
+        ] as const,
+        initialValue: "call-llm" as const,
+      });
+
+  if (isCancel(action)) return false;
+
+  if (action === "stop") return false;
+
+  if (action === "open-editor") {
+    await openInEditor(options.editor, options.path);
+    return true;
   }
+
+  action satisfies "call-llm";
+
+  let msgs = [...messages];
+  if (options.ai.system) {
+    msgs.unshift({ role: "system", content: options.ai.system });
+  }
+
+  let requestOptions = {
+    ...options.ai,
+    system: systemPrompt,
+    messages: msgs,
+  };
+
+  // show spinner while waiting for model to start streaming
+  let spin = spinner();
+  spin.start("Waiting for response...");
+  let { textStream, response } = streamText({
+    ...requestOptions,
+    onError: ({ error }) => log.error(`⚠️ streamText error: ${error}`),
+  });
+
+  // stop spinner on first token and forward all chunks
+  let interceptedStream = (async function* () {
+    let first = true;
+    for await (let chunk of textStream) {
+      if (first) {
+        spin.stop();
+        first = false;
+      }
+      yield chunk;
+    }
+  })();
+
+  // ensure spinner is stopped even if no tokens were streamed
+  try {
+    await stream.message(interceptedStream);
+  } finally {
+    spin.stop();
+  }
+
+  let responseMessages = (await response).messages;
+
+  await writeChatFile([...messages, ...responseMessages], options);
+
+  return true;
+}
+
+async function readAndParseChatFile(path: string): Promise<CoreMessage[]> {
+  let chatFileContent = await readFile(path, { encoding: "utf-8" });
+  let messages = markdownToMessages(chatFileContent);
+  return messages;
+}
+
+async function writeChatFile(
+  messages: CoreMessage[],
+  options: MarkdownAIOptions,
+): Promise<void> {
+  let content = messagesToMarkdown(messages, options.withCompression);
+  await writeFile(options.path, content, { encoding: "utf-8" });
 }
 
 type AISDKArgs = Omit<Parameters<typeof streamText>[0], "messages" | "prompt">;

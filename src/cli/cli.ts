@@ -11,7 +11,7 @@ import { anthropic } from "@ai-sdk/anthropic";
 import { intro, log, outro } from "@clack/prompts";
 import { createProviderRegistry } from "ai";
 
-import { MarkdownAI } from "../chat/chat.js";
+import { runMarkdownAI } from "../chat/chat.js";
 import { tryCatch } from "../utils/index.js";
 
 import { createReadFilesTool } from "../tools/read-files.js";
@@ -113,18 +113,18 @@ let tools = opts.tools
     }
   : undefined;
 
-let chat = new MarkdownAI({
-  path: chatPath,
-  editor: config.editor,
-  ai: { model, system, tools },
-  withCompression: config.compression,
-});
-
 if (opts.showConfig) {
   log.info(`Config:\n${JSON.stringify(config, null, 2)}`);
 }
 
-let res = await tryCatch(chat.run());
+let res = await tryCatch(
+  runMarkdownAI({
+    path: chatPath,
+    editor: config.editor,
+    ai: { model, system, tools },
+    withCompression: config.compression,
+  }),
+);
 
 if (!res.ok) {
   log.error(res.error.message);
