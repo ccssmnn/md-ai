@@ -67,12 +67,12 @@ function processCodeNode(node: Code, markdown: string): ContentPart[] {
   }
   if (node.lang === "tool-call-compressed") {
     try {
-      const parsed = JSON.parse(node.value);
-      const compressedArgsBuffer = Buffer.from(parsed.compressedArgs, "base64");
-      const argsJson =
+      let parsed = JSON.parse(node.value);
+      let compressedArgsBuffer = Buffer.from(parsed.compressedArgs, "base64");
+      let argsJson =
         brotliDecompressSync(compressedArgsBuffer).toString("utf-8");
-      const args = JSON.parse(argsJson);
-      const data = toolCallSchema.parse({
+      let args = JSON.parse(argsJson);
+      let data = toolCallSchema.parse({
         toolCallId: parsed.toolCallId,
         toolName: parsed.toolName,
         args: args,
@@ -93,16 +93,16 @@ function processCodeNode(node: Code, markdown: string): ContentPart[] {
   }
   if (node.lang === "tool-result-compressed") {
     try {
-      const parsed = JSON.parse(node.value);
-      const compressedResultBuffer = Buffer.from(
+      let parsed = JSON.parse(node.value);
+      let compressedResultBuffer = Buffer.from(
         parsed.compressedResult,
         "base64",
       );
-      const resultJson = brotliDecompressSync(compressedResultBuffer).toString(
+      let resultJson = brotliDecompressSync(compressedResultBuffer).toString(
         "utf-8",
       );
-      const result = JSON.parse(resultJson);
-      const data = toolResultSchema.parse({
+      let result = JSON.parse(resultJson);
+      let data = toolResultSchema.parse({
         toolCallId: parsed.toolCallId,
         toolName: parsed.toolName,
         result: result,

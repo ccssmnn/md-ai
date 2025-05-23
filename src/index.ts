@@ -1,4 +1,4 @@
-export { MarkdownAI } from "./chat/chat.js";
+export { runMarkdownAI } from "./chat/chat.js";
 export type { MarkdownAIOptions } from "./chat/chat.js";
 
 import { markdownToMessages } from "./markdown/parse.js";
@@ -16,6 +16,7 @@ import { createReadFilesTool } from "./tools/read-files.js";
 import { createWriteFilesTool } from "./tools/write-files.js";
 import { createGrepSearchTool } from "./tools/grep-search.js";
 import { createExecCommandTool } from "./tools/exec-command.js";
+import { createFetchUrlContentTool } from "./tools/fetch-url-content.js";
 
 export const tools = {
   createWriteFilesTool,
@@ -23,4 +24,5 @@ export const tools = {
   createListFilesTool,
   createGrepSearchTool,
   createExecCommandTool,
+  createFetchUrlContentTool,
 };

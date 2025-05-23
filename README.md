@@ -43,6 +43,15 @@ Start a chat session:
 md-ai chat.md
 ```
 
+## Tools
+
+- `listFiles`: Lists files in the working directory.
+- `readFiles`: Reads file contents.
+- `writeFiles`: Writes content to files with permission prompts.
+- `grepSearch`: Searches text in files using grep.
+- `execCommand`: Executes shell commands with permission prompts.
+- `fetchUrlContent`: Fetches and extracts relevant text content from a given URL. Supports optional filtering of extracted links by regex patterns (only links matching all patterns are included) and limiting the number of returned links. Returns the main content and a list of meaningful links with descriptions to help navigate the page.
+
 ## Usage
 
 ### CLI
@@ -96,9 +105,9 @@ Use as a library with custom tools and models:
 
 ```javascript
 import { google } from "@ai-sdk/google";
-import { MarkdownAI, tools } from "@ccssmnn/md-ai";
+import { runMarkdownAI, tools } from "@ccssmnn/md-ai";
 
-let chat = new MarkdownAI({
+await runMarkdownAI({
   path: "./chat.md",
   editor: "code --wait",
   ai: {
@@ -109,15 +118,10 @@ let chat = new MarkdownAI({
       listFiles: tools.createListFilesTool({ cwd: "./" }),
       writeFiles: tools.createWriteFilesTool({ cwd: "./" }),
       grepSearch: tools.createGrepSearchTool({ cwd: "./" }),
-      execCommand: tools.createExecCommandTool({
-        cwd: "./",
-        session: { alwaysAllow: new Set() },
-      }),
+      execCommand: tools.createExecCommandTool({ cwd: "./", alwaysAllow: [] }),
     },
   },
 });
-
-await chat.run();
 ```
 
 ## Configuration

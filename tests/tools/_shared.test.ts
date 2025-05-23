@@ -9,7 +9,7 @@ test("tools: _shared: parseGitignore", async (t) => {
   });
 
   await t.test("should ignore comments and empty lines", () => {
-    const content = `
+    let content = `
 # This is a comment
 
   file.txt  
@@ -24,7 +24,7 @@ test("tools: _shared: parseGitignore", async (t) => {
   });
 
   await t.test("should handle basic file patterns", () => {
-    const content = `
+    let content = `
 file.txt
 *.log
 `;
@@ -35,7 +35,7 @@ file.txt
   });
 
   await t.test("should handle negated patterns", () => {
-    const content = `
+    let content = `
 !important.txt
 !dir/
 `;
@@ -47,7 +47,7 @@ file.txt
   });
 
   await t.test("should handle anchored patterns", () => {
-    const content = `
+    let content = `
 /root_file.txt
 /root_dir/
 `;
@@ -59,7 +59,7 @@ file.txt
   });
 
   await t.test("should handle a mix of patterns", () => {
-    const content = `
+    let content = `
 # Ignore build directory
 /build/
 
@@ -84,7 +84,7 @@ file.txt
   await t.test(
     "should handle directory patterns without trailing slash but no stars or dots",
     () => {
-      const content = `
+      let content = `
 temp
 `;
       assert.deepStrictEqual(parseGitignore(content), [
@@ -97,7 +97,7 @@ temp
   await t.test(
     "should handle patterns with dots but no stars as file patterns",
     () => {
-      const content = `
+      let content = `
 file.with.dots
 `;
       assert.deepStrictEqual(parseGitignore(content), ["**/file.with.dots"]);
