@@ -26,24 +26,22 @@ export function createFetchUrlContentTool() {
   });
 }
 
+import { Readability } from "@mozilla/readability";
+
 function extractRelevantContent(html: string): string {
   let dom = new JSDOM(html);
   let document = dom.window.document;
 
-  document
-    .querySelectorAll("script, style, noscript")
-    .forEach((el: Element) => el.remove());
+  // Use Readability to parse the main article content
+  let reader = new Readability(document);
+  let article = reader.parse();
 
-  let content = "";
-  let article = document.querySelector("article");
-  if (article) {
-    content = article.textContent || "";
-  } else {
-    content = document.body.textContent || "";
+  if (!article || !article.textContent) {
+    // fallback to body text if Readability fails
+    return document.body.textContent?.replace(/\s+/g, " ").trim() || "";
   }
 
-  content = content.replace(/\s+/g, " ").trim();
-  return content;
+  return article.textContent.replace(/\s+/g, " ").trim();
 }
 
 type Link = { url: string; description: string };
