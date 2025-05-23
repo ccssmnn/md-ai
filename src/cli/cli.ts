@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { cwd as processCwd } from "node:process";
+import { cwd as cwd_ } from "node:process";
 import { resolve } from "node:path";
 import { readFile, writeFile } from "node:fs/promises";
 
@@ -13,11 +13,14 @@ import { createProviderRegistry } from "ai";
 
 import { MarkdownAI } from "../chat/chat.js";
 import { tryCatch } from "../utils/index.js";
+
 import { createReadFilesTool } from "../tools/read-files.js";
 import { createListFilesTool } from "../tools/list-files.js";
 import { createWriteFilesTool } from "../tools/write-files.js";
 import { createGrepSearchTool } from "../tools/grep-search.js";
 import { createExecCommandTool } from "../tools/exec-command.js";
+import { createFetchUrlContentTool } from "../tools/fetch-url-content.js";
+
 import { loadConfig } from "./config.js";
 
 let registry = createProviderRegistry({ anthropic, openai, google });
@@ -43,7 +46,7 @@ let program = new Command()
   .option(
     "-c, --cwd <path>",
     "Working directory for file tools, defaults to current directory.",
-    processCwd(),
+    cwd_(),
   )
   .option(
     "--config <path>",
@@ -98,6 +101,7 @@ let model = modelRes.data;
 
 let cwd = resolve(opts.cwd);
 let execSession = { alwaysAllow: new Set<string>() };
+
 let tools = opts.tools
   ? {
       listFiles: createListFilesTool({ cwd }),
@@ -105,6 +109,7 @@ let tools = opts.tools
       writeFiles: createWriteFilesTool({ cwd }),
       grepSearch: createGrepSearchTool({ cwd }),
       execCommand: createExecCommandTool({ cwd, session: execSession }),
+      fetchUrlContent: createFetchUrlContentTool(),
     }
   : undefined;
 

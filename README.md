@@ -43,6 +43,15 @@ Start a chat session:
 md-ai chat.md
 ```
 
+## Tools
+
+- `listFiles`: Lists files in the working directory.
+- `readFiles`: Reads file contents.
+- `writeFiles`: Writes content to files with permission prompts.
+- `grepSearch`: Searches text in files using grep.
+- `execCommand`: Executes shell commands with permission prompts.
+- `fetchUrlContent`: Fetches and extracts relevant text content from a given URL, returning the content and a list of links with descriptions found on the page.
+
 ## Usage
 
 ### CLI
