@@ -5,7 +5,7 @@ import { log, select } from "@clack/prompts";
 
 export function createExecCommandTool(options: {
   cwd: string;
-  session: ExecSession;
+  alwaysAllow: Array<string>;
 }) {
   return tool({
     description: `
@@ -28,8 +28,8 @@ Examples:
 `,
     parameters: execCommandParameters,
     execute: async ({ command, arguments: args, timeout, explanation }) => {
-      let sessionKey = `${command} ${args.join(" ")}`;
-      if (options.session.alwaysAllow.has(sessionKey)) {
+      let executable = `${command} ${args.join(" ")}`;
+      if (options.alwaysAllow.includes(executable)) {
         return await runCommand(command, args, options.cwd, timeout);
       }
 
@@ -58,7 +58,7 @@ Explanation: ${explanation}`,
         };
       }
       if (userChoice === "always") {
-        options.session.alwaysAllow.add(sessionKey);
+        options.alwaysAllow.push(executable);
       }
       return await runCommand(command, args, options.cwd, timeout);
     },
@@ -76,10 +76,6 @@ let execCommandParameters = z.object({
       "Short explanation for why this command should be run (displayed to the user)",
     ),
 });
-
-export type ExecSession = {
-  alwaysAllow: Set<string>;
-};
 
 async function runCommand(
   command: string,

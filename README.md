@@ -105,9 +105,9 @@ Use as a library with custom tools and models:
 
 ```javascript
 import { google } from "@ai-sdk/google";
-import { MarkdownAI, tools } from "@ccssmnn/md-ai";
+import { runMarkdownAI, tools } from "@ccssmnn/md-ai";
 
-let chat = new MarkdownAI({
+await runMarkdownAI({
   path: "./chat.md",
   editor: "code --wait",
   ai: {
@@ -118,15 +118,10 @@ let chat = new MarkdownAI({
       listFiles: tools.createListFilesTool({ cwd: "./" }),
       writeFiles: tools.createWriteFilesTool({ cwd: "./" }),
       grepSearch: tools.createGrepSearchTool({ cwd: "./" }),
-      execCommand: tools.createExecCommandTool({
-        cwd: "./",
-        session: { alwaysAllow: new Set() },
-      }),
+      execCommand: tools.createExecCommandTool({ cwd: "./", alwaysAllow: [] }),
     },
   },
 });
-
-await chat.run();
 ```
 
 ## Configuration

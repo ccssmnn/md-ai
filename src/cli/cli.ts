@@ -9,7 +9,7 @@ import { google } from "@ai-sdk/google";
 import { openai } from "@ai-sdk/openai";
 import { anthropic } from "@ai-sdk/anthropic";
 import { intro, log, outro } from "@clack/prompts";
-import { createProviderRegistry } from "ai";
+import { createProviderRegistry, type ToolSet } from "ai";
 
 import { runMarkdownAI } from "../chat/chat.js";
 import { tryCatch } from "../utils/index.js";
@@ -25,11 +25,14 @@ import { loadConfig, type MarkdownAIConfig } from "./config.js";
 
 async function main() {
   let { program, chatPath } = parseCLIArguments();
+
   let loadedConfig = await loadConfig(program.opts().config);
+
   let config = mergeConfigs(program.opts(), loadedConfig);
+
   let options = await prepareOptions(config, program.opts(), chatPath);
-  let res = await startMarkdownAI(options);
-  process.exit(res.ok ? 0 : 1);
+
+  await startMarkdownAI(options);
 }
 
 function parseCLIArguments() {
@@ -90,10 +93,16 @@ async function prepareOptions(
   let system = await loadSystemPrompt(config.system);
   let model = getModel(config.model);
   let cwd = resolve(opts.cwd);
-  let execSession = { alwaysAllow: new Set<string>() };
-  let tools = createTools(opts.tools, cwd, execSession);
+  let tools = opts.tools ? createTools(cwd) : undefined;
 
-  return { chatPath, config, system, model, tools, opts };
+  return {
+    chatPath,
+    config,
+    system,
+    model,
+    tools,
+    showConfig: opts.showConfig,
+  };
 }
 
 async function ensureChatFileExists(chatPath: string) {
@@ -124,18 +133,13 @@ function getModel(modelName: string) {
   return modelRes.data;
 }
 
-function createTools(
-  useTools: boolean | undefined,
-  cwd: string,
-  execSession: { alwaysAllow: Set<string> },
-) {
-  if (!useTools) return undefined;
+function createTools(cwd: string) {
   return {
     listFiles: createListFilesTool({ cwd }),
     readFiles: createReadFilesTool({ cwd }),
     writeFiles: createWriteFilesTool({ cwd }),
     grepSearch: createGrepSearchTool({ cwd }),
-    execCommand: createExecCommandTool({ cwd, session: execSession }),
+    execCommand: createExecCommandTool({ cwd, alwaysAllow: [] }),
     fetchUrlContent: createFetchUrlContentTool(),
   };
 }
@@ -146,14 +150,14 @@ async function startMarkdownAI({
   system,
   model,
   tools,
-  opts,
+  showConfig,
 }: {
   chatPath: string;
   config: ReturnType<typeof mergeConfigs>;
   system: string | undefined;
   model: any;
-  tools: any;
-  opts: any;
+  tools: ToolSet | undefined;
+  showConfig: boolean;
 }) {
   intro("Hey! I'm Markdown AI 🫡");
 
@@ -164,7 +168,7 @@ async function startMarkdownAI({
     log.info(`Available tools:\n${toolList}`);
   }
 
-  if (opts.showConfig) {
+  if (showConfig) {
     log.info(`Config:\n${JSON.stringify(config, null, 2)}`);
   }
 
@@ -184,7 +188,7 @@ async function startMarkdownAI({
     outro("Bye 👋");
   }
 
-  return res;
+  process.exit(res.ok ? 0 : 1);
 }
 
 function fatal(message: string, code = 1): never {
