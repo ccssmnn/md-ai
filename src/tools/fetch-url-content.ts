@@ -5,9 +5,24 @@ import { z } from "zod";
 
 export function createFetchUrlContentTool() {
   return tool({
-    description: "Fetches and extracts relevant text content from a given URL.",
-    parameters: z.object({ url: z.string() }),
-    execute: async ({ url }) => {
+    description:
+      "Fetches and extracts relevant text content from a given URL. Optionally filters extracted links by regex patterns and limits the number of links.",
+    parameters: z.object({
+      url: z.string(),
+      linkPatterns: z
+        .array(z.string())
+        .optional()
+        .describe(
+          "Optional list of regex patterns. Only links whose URLs match all patterns will be included.",
+        ),
+      maxLinks: z
+        .number()
+        .optional()
+        .describe(
+          "Optional maximum number of links to return. Defaults to 20.",
+        ),
+    }),
+    execute: async ({ url, linkPatterns, maxLinks }) => {
       let response = await fetch(url);
       if (!response.ok) {
         log.step(`failed to fetch url: ${url}`);
@@ -19,7 +34,7 @@ export function createFetchUrlContentTool() {
       }
       let html = await response.text();
       let content = extractRelevantContent(html);
-      let links = extractLinks(html, url);
+      let links = extractLinks(html, url, linkPatterns, maxLinks);
       log.step(`fetch url: ${url}`);
       return { success: true, content, links };
     },
@@ -46,7 +61,12 @@ function extractRelevantContent(html: string): string {
 
 type Link = { url: string; description: string };
 
-function extractLinks(html: string, baseUrl: string): Link[] {
+function extractLinks(
+  html: string,
+  baseUrl: string,
+  linkPatterns?: string[],
+  maxLinks?: number,
+): Link[] {
   let dom = new JSDOM(html);
   let document = dom.window.document;
   let links: Link[] = [];
@@ -56,7 +76,7 @@ function extractLinks(html: string, baseUrl: string): Link[] {
     let href = a.getAttribute("href");
     if (!href) return;
     // Ignore same-page anchor links
-    if (href.startsWith('#')) {
+    if (href.startsWith("#")) {
       return;
     }
 
@@ -67,8 +87,29 @@ function extractLinks(html: string, baseUrl: string): Link[] {
     let description = a.textContent?.trim() || "";
 
     // Filter out links with empty description or common navigation keywords
-    if (!description || /^(home|about|contact|privacy|terms|login|signup|register)$/i.test(description)) {
+    if (
+      !description ||
+      /^(home|about|contact|privacy|terms|login|signup|register)$/i.test(
+        description,
+      )
+    ) {
       return;
+    }
+
+    // If linkPatterns provided, filter links that do not match any pattern
+    if (linkPatterns && linkPatterns.length > 0) {
+      let matchesPattern = linkPatterns.every((pattern) => {
+        try {
+          let regex = new RegExp(pattern);
+          return regex.test(url.href);
+        } catch {
+          // fallback to includes if invalid regex
+          return url.href.includes(pattern);
+        }
+      });
+      if (!matchesPattern) {
+        return;
+      }
     }
 
     links.push({ url: url.href, description });
@@ -81,6 +122,6 @@ function extractLinks(html: string, baseUrl: string): Link[] {
     }
   }
 
-  // Limit to max 20 links
-  return Array.from(uniqueLinksMap.values()).slice(0, 20);
+  // Limit to maxLinks or default 20
+  return Array.from(uniqueLinksMap.values()).slice(0, maxLinks ?? 20);
 }

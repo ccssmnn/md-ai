@@ -50,7 +50,7 @@ md-ai chat.md
 - `writeFiles`: Writes content to files with permission prompts.
 - `grepSearch`: Searches text in files using grep.
 - `execCommand`: Executes shell commands with permission prompts.
-- `fetchUrlContent`: Fetches and extracts relevant text content from a given URL, returning the content and a list of links with descriptions found on the page.
+- `fetchUrlContent`: Fetches and extracts relevant text content from a given URL. Supports optional filtering of extracted links by regex patterns (only links matching all patterns are included) and limiting the number of returned links. Returns the main content and a list of meaningful links with descriptions to help navigate the page.
 
 ## Usage
 
