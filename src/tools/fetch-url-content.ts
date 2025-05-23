@@ -55,11 +55,22 @@ function extractLinks(html: string, baseUrl: string): Link[] {
   anchorElements.forEach((a) => {
     let href = a.getAttribute("href");
     if (!href) return;
+    // Ignore same-page anchor links
+    if (href.startsWith('#')) {
+      return;
+    }
+
     let url = new URL(href, baseUrl);
     if (url.protocol !== "http:" && url.protocol !== "https:") {
       return;
     }
     let description = a.textContent?.trim() || "";
+
+    // Filter out links with empty description or common navigation keywords
+    if (!description || /^(home|about|contact|privacy|terms|login|signup|register)$/i.test(description)) {
+      return;
+    }
+
     links.push({ url: url.href, description });
   });
 
@@ -69,5 +80,7 @@ function extractLinks(html: string, baseUrl: string): Link[] {
       uniqueLinksMap.set(link.url, link);
     }
   }
-  return Array.from(uniqueLinksMap.values());
+
+  // Limit to max 20 links
+  return Array.from(uniqueLinksMap.values()).slice(0, 20);
 }
