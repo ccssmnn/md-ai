@@ -13,7 +13,7 @@ import { tool } from "ai";
 import { isCancel, log, multiselect, select, text } from "@clack/prompts";
 import type { MultiSelectOptions } from "@clack/prompts";
 
-import { ensureProjectPath } from "./_shared.js";
+import { ensureProjectPath, checkFileVersions } from "./_shared.js";
 import { shouldNeverHappen, tryCatch } from "../utils/index.js";
 
 export function createWriteFilesTool(options: { cwd: string }) {
@@ -70,6 +70,25 @@ The tool will present the proposed changes to the user for confirmation before a
     execute: async ({ patches }) => {
       log.step("write files: the model wants to make the changes");
       log.info(patchesToDiffString(patches));
+
+      let filesToModify = patches
+        .filter((p) => p.type === "update" || p.type === "replace")
+        .map((p) => ensureProjectPath(options.cwd, p.path));
+
+      if (filesToModify.length > 0) {
+        let { outdatedFiles } = await checkFileVersions(filesToModify);
+        outdatedFiles = outdatedFiles.map((f) =>
+          f.replace(options.cwd + "/", ""),
+        );
+        if (outdatedFiles.length !== 0) {
+          return {
+            ok: false,
+            status: "files-outdated",
+            reason: `The following files have been modified since you last read them: ${outdatedFiles.join(", ")}. Please re-read these files before attempting to modify them.`,
+            outdatedFiles,
+          };
+        }
+      }
 
       let patchesToAllow = await askWhichPatchesToAllow(patches);
       if (patchesToAllow.type === "none") {
