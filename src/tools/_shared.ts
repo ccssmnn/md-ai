@@ -4,7 +4,7 @@ import { stat, readFile } from "node:fs/promises";
 import { glob } from "glob";
 
 import { tryCatch } from "../utils/index.js";
-import { log } from "@clack/prompts";
+import { spinner } from "@clack/prompts";
 import { setTimeout } from "node:timers/promises";
 
 export async function maybeAutoMode(options: {
@@ -23,19 +23,22 @@ export async function maybeAutoMode(options: {
   process.stdin.resume();
   process.stdin.on("data", keypressListener);
 
+  const s = spinner();
   try {
+    s.start("auto: waiting for cancellation... (press any key to cancel)");
     for (let i = options.autoTimeout; i > 0; i--) {
-      log.info(
+      s.message(
         `auto: waiting ${i}s for cancellation... (press any key to cancel)`,
       );
       await setTimeout(1000, undefined, {
         signal: abortController.signal,
       });
     }
+    s.stop("auto-mode: proceeding");
     return true;
   } catch (e) {
     // aborted
-    log.info("auto-mode: cancelled by user");
+    s.stop("auto-mode: cancelled by user");
     return false;
   } finally {
     process.stdin.off("data", keypressListener);
@@ -158,4 +161,3 @@ export async function checkFileVersions(filePaths: string[]): Promise<{
     outdatedFiles,
   };
 }
-

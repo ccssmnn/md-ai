@@ -43,7 +43,12 @@ Examples:
 Explanation: ${explanation}`,
       );
 
-      if (await maybeAutoMode({ auto: options.auto, autoTimeout: options.autoTimeout })) {
+      if (
+        await maybeAutoMode({
+          auto: options.auto,
+          autoTimeout: options.autoTimeout,
+        })
+      ) {
         return await runCommand(command, args, options.cwd, timeout);
       }
 
@@ -79,8 +84,6 @@ Explanation: ${explanation}`,
     },
   });
 }
-
-
 
 let execCommandParameters = z.object({
   command: z.string().describe("The CLI command to execute (e.g. 'ls')"),

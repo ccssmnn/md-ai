@@ -69,11 +69,7 @@ function parseCLIArguments() {
       "Disable compression for tool call/result fences",
     )
     .option("--auto", "Enable auto-mode for tools")
-    .option(
-      "--auto-timeout <seconds>",
-      "Timeout in seconds for auto-mode",
-      "5",
-    )
+    .option("--auto-timeout <seconds>", "Timeout in seconds for auto-mode", "5")
     .parse(process.argv);
 
   let chatPath = program.args[0];
@@ -90,12 +86,10 @@ function mergeConfigs(opts: any, loadedConfig: MarkdownAIConfig) {
     opts.editor || loadedConfig.editor || process.env.EDITOR || "vi +99999";
   let compression =
     opts.compression === true ? !loadedConfig.compression : opts.compression;
-  let autoMode = opts.auto ?? loadedConfig.auto ?? false;
-  let autoModeTimeout =
-    parseInt(opts.autoTimeout, 10) ||
-    loadedConfig["auto-timeout"] ||
-    5;
-  return { system, model, editor, compression, autoMode, autoModeTimeout };
+  let auto = opts.auto ?? loadedConfig.auto ?? false;
+  let autoTimeout =
+    parseInt(opts.autoTimeout, 10) || loadedConfig["auto-timeout"] || 5;
+  return { system, model, editor, compression, auto, autoTimeout };
 }
 
 async function prepareOptions(
@@ -221,5 +215,3 @@ function fatal(message: string, code = 1): never {
 }
 
 main();
-
-

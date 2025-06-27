@@ -132,7 +132,12 @@ ${outdatedFiles.map((f) => `  - ${f}`).join("\n")}`,
             reason?: string;
           };
 
-      if (await maybeAutoMode({ auto: options.auto, autoTimeout: options.autoTimeout })) {
+      if (
+        await maybeAutoMode({
+          auto: options.auto,
+          autoTimeout: options.autoTimeout,
+        })
+      ) {
         patchesToAllow = { type: "all" };
       } else {
         patchesToAllow = await askWhichPatchesToAllow(patches);
