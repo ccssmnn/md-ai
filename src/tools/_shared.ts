@@ -13,22 +13,35 @@ export async function maybeAutoMode(options: {
 }) {
   if (!options.auto) return false;
 
-  const abortController = new AbortController();
+  let abortController = new AbortController();
+  let shouldProceed = false;
 
-  const keypressListener = () => {
-    abortController.abort();
+  let keypressListener = (data: Buffer) => {
+    let key = data.toString();
+    // ESC key (ASCII 27 or \x1b)
+    if (key === "\x1b") {
+      abortController.abort();
+    }
+    // Enter key (ASCII 13 or \r, or \n)
+    else if (key === "\r" || key === "\n") {
+      shouldProceed = true;
+      abortController.abort();
+    }
+    // Ignore all other keys
   };
 
   process.stdin.setRawMode(true);
   process.stdin.resume();
   process.stdin.on("data", keypressListener);
 
-  const s = spinner();
+  let s = spinner();
   try {
-    s.start("auto: waiting for cancellation... (press any key to cancel)");
+    s.start(
+      "auto: waiting for cancellation... (press ESC to cancel, ENTER to proceed)",
+    );
     for (let i = options.autoTimeout; i > 0; i--) {
       s.message(
-        `auto: waiting ${i}s for cancellation... (press any key to cancel)`,
+        `auto: waiting ${i}s for cancellation... (press ESC to cancel, ENTER to proceed)`,
       );
       await setTimeout(1000, undefined, {
         signal: abortController.signal,
@@ -38,8 +51,13 @@ export async function maybeAutoMode(options: {
     return true;
   } catch (e) {
     // aborted
-    s.stop("auto-mode: cancelled by user");
-    return false;
+    if (shouldProceed) {
+      s.stop("auto-mode: proceeding");
+      return true;
+    } else {
+      s.stop("auto-mode: cancelled by user");
+      return false;
+    }
   } finally {
     process.stdin.off("data", keypressListener);
     process.stdin.pause();

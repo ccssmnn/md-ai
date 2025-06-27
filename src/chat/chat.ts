@@ -5,7 +5,7 @@ import type { CoreMessage } from "ai";
 
 import { markdownToMessages } from "../markdown/parse.js";
 import { messagesToMarkdown } from "../markdown/serialize.js";
-import { isCancel, log, select, spinner, stream, text } from "@clack/prompts";
+import { isCancel, log, select, stream, text } from "@clack/prompts";
 import { openInEditor } from "./editor.js";
 
 /** Options for configuring a markdown-backed ai session */
