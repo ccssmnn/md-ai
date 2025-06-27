@@ -65,6 +65,29 @@ The input should be a JSON array where each element is an object representing a 
    Note: For large file modifications, using the 'replace' type is generally more efficient and reliable than using multiple or a single large 'update' patch.
 
 The tool will present the proposed changes to the user for confirmation before applying them.
+
+IMPORTANT: After successfully applying file changes, you should inspect the codebase to determine what formatting, linting, and compilation checks are appropriate, then run them:
+
+1. **Inspect the project structure** to identify the technology stack:
+   - Look for package.json (Node.js/JavaScript/TypeScript)
+   - Look for Cargo.toml (Rust)
+   - Look for go.mod (Go)
+   - Look for pyproject.toml, setup.py, requirements.txt (Python)
+   - Look for Makefile, composer.json, etc.
+
+2. **Check for existing scripts and tools**:
+   - In package.json: look for "scripts" section (format, lint, type-check, test, etc.)
+   - In Makefile: look for formatting/linting targets
+   - In pyproject.toml: look for tool configurations (black, ruff, mypy, etc.)
+   - Look for configuration files (.eslintrc, .prettierrc, tox.ini, etc.)
+
+3. **Run appropriate checks based on what you find**:
+   - **Formatting**: prettier, black, cargo fmt, go fmt, etc.
+   - **Linting**: eslint, ruff, cargo clippy, golangci-lint, flake8, etc.
+   - **Type checking**: tsc, mypy, cargo check, go build, etc.
+   - **Testing**: npm test, cargo test, go test, pytest, etc.
+
+Use the execCommand tool to run these checks. Always prefer using existing project scripts (e.g., "npm run lint") over direct tool invocation when available.
 `,
     parameters: writeFilesParameters,
     execute: async ({ patches }) => {
