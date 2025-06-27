@@ -1,9 +1,9 @@
 import assert from "node:assert";
 import test from "node:test";
 
-import { applyPatchToString } from "../../src/tools/write-files.js";
+import { applyPatchToString } from "../../src/tools/write-file.js";
 
-test("tools: write-files: applyPatchToString", async (t) => {
+test("tools: write-file: applyPatchToString", async (t) => {
   await t.test(
     "should apply an update patch when the search string matches a full line",
     () => {

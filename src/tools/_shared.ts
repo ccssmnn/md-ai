@@ -132,32 +132,24 @@ export function trackFileAccess(absolutePath: string, mtime: number): void {
   });
 }
 
-export async function checkFileVersions(filePaths: string[]): Promise<{
-  outdatedFiles: string[];
+export async function checkFileVersion(path: string): Promise<{
+  isOutdated: boolean;
 }> {
-  let outdatedFiles: string[] = [];
-
-  for (let filePath of filePaths) {
-    let accessInfo = fileAccessTracker.get(filePath);
-    if (!accessInfo) {
-      // File was never read by the model, consider it outdated
-      outdatedFiles.push(filePath);
-      continue;
-    }
-
-    let statRes = await tryCatch(stat(filePath));
-    if (!statRes.ok) {
-      // File doesn't exist anymore, skip version check
-      continue;
-    }
-
-    if (statRes.data.mtimeMs > accessInfo.lastKnownMtime) {
-      // File was modified since last read
-      outdatedFiles.push(filePath);
-    }
+  let accessInfo = fileAccessTracker.get(path);
+  if (!accessInfo) {
+    // File was never read by the model, consider it outdated
+    return { isOutdated: true };
   }
 
-  return {
-    outdatedFiles,
-  };
+  let statRes = await tryCatch(stat(path));
+  if (!statRes.ok) {
+    // File doesn't exist anymore, skip version check
+    return { isOutdated: false };
+  }
+
+  if (statRes.data.mtimeMs > accessInfo.lastKnownMtime) {
+    // File was modified since last read
+    return { isOutdated: true };
+  }
+  return { isOutdated: false };
 }

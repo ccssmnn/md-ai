@@ -16,7 +16,7 @@ import { tryCatch } from "../utils/index.js";
 
 import { createReadFilesTool } from "../tools/read-files.js";
 import { createListFilesTool } from "../tools/list-files.js";
-import { createWriteFilesTool } from "../tools/write-files.js";
+import { createWriteFileTool } from "../tools/write-file.js";
 import { createGrepSearchTool } from "../tools/grep-search.js";
 import { createExecCommandTool } from "../tools/exec-command.js";
 import { createFetchUrlContentTool } from "../tools/fetch-url-content.js";
@@ -156,7 +156,7 @@ function createTools(options: {
   return {
     listFiles: createListFilesTool({ cwd: options.cwd }),
     readFiles: createReadFilesTool({ cwd: options.cwd }),
-    writeFiles: createWriteFilesTool(options),
+    writeFiles: createWriteFileTool(options),
     grepSearch: createGrepSearchTool({ cwd: options.cwd }),
     execCommand: createExecCommandTool({ ...options, alwaysAllow: [] }),
     fetchUrlContent: createFetchUrlContentTool(),
