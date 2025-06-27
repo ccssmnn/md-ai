@@ -10,7 +10,7 @@ import { dirname } from "node:path";
 
 import { z } from "zod";
 import { tool } from "ai";
-import { isCancel, log, multiselect, select } from "@clack/prompts";
+import { isCancel, log, multiselect, select, text } from "@clack/prompts";
 import type { MultiSelectOptions } from "@clack/prompts";
 
 import { ensureProjectPath } from "./_shared.js";
@@ -76,7 +76,9 @@ The tool will present the proposed changes to the user for confirmation before a
         return {
           ok: false,
           status: "user-denied",
-          reason: "the user did not allow any of the patches. ask them why.",
+          reason:
+            patchesToAllow.reason ||
+            "the user did not allow any of the patches. ask them why.",
         };
       }
 
@@ -91,7 +93,10 @@ The tool will present the proposed changes to the user for confirmation before a
               ok: false,
               path: patch.path,
               status: "user-denied",
-              reason: "user decided to not allow this patch. ask them why.",
+              reason:
+                patchesToAllow.type === "some" && patchesToAllow.reason
+                  ? patchesToAllow.reason
+                  : "user decided to not allow this patch. ask them why.",
             };
           }
           switch (patch.type) {
@@ -204,7 +209,12 @@ async function askWhichPatchesToAllow(patches: Array<FilePatch>) {
   if (isCancel(firstResponse)) throw Error("user has canceled");
 
   if (firstResponse === "none") {
-    return { type: "none" as const };
+    let reason = await text({
+      message: "Why are you denying all patches? (optional)",
+      placeholder: "Enter reason or press Enter to skip",
+    });
+    if (isCancel(reason)) throw Error("user has canceled");
+    return { type: "none" as const, reason: reason || undefined };
   }
   if (firstResponse === "all") {
     return { type: "all" as const };
@@ -234,7 +244,19 @@ async function askWhichPatchesToAllow(patches: Array<FilePatch>) {
     options: patchOptions,
   });
   if (isCancel(response)) throw Error("user has canceled");
-  return { type: "some" as const, allowedPatchIDs: response };
+
+  let deniedPatchCount = patches.length - response.length;
+  let reason: string | undefined;
+  if (deniedPatchCount > 0) {
+    let reasonResponse = await text({
+      message: `Why are you denying ${deniedPatchCount} patch${deniedPatchCount > 1 ? "es" : ""}? (optional)`,
+      placeholder: "Enter reason or press Enter to skip",
+    });
+    if (isCancel(reasonResponse)) throw Error("user has canceled");
+    reason = reasonResponse || undefined;
+  }
+
+  return { type: "some" as const, allowedPatchIDs: response, reason };
 }
 
 type PatchResult = {
