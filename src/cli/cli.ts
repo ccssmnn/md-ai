@@ -26,11 +26,15 @@ import { loadConfig, type MarkdownAIConfig } from "./config.js";
 async function main() {
   let { program, chatPath } = parseCLIArguments();
 
-  let loadedConfig = await loadConfig(program.opts().config);
+  intro("Hey! I'm Markdown AI 🫡");
 
+  let loadedConfig = await loadConfig(program.opts().config);
   let config = mergeConfigs(program.opts(), loadedConfig);
 
   let options = await prepareOptions(config, program.opts(), chatPath);
+  if (options.showConfig) {
+    log.info(`Config:\n${JSON.stringify(config, null, 2)}`);
+  }
 
   await startMarkdownAI(options);
 }
@@ -150,26 +154,16 @@ async function startMarkdownAI({
   system,
   model,
   tools,
-  showConfig,
 }: {
   chatPath: string;
   config: ReturnType<typeof mergeConfigs>;
   system: string | undefined;
   model: any;
   tools: ToolSet | undefined;
-  showConfig: boolean;
 }) {
-  intro("Hey! I'm Markdown AI 🫡");
-
   if (tools) {
-    let toolList = Object.keys(tools)
-      .map((t) => `- ${t}`)
-      .join("\n");
-    log.info(`Available tools:\n${toolList}`);
-  }
-
-  if (showConfig) {
-    log.info(`Config:\n${JSON.stringify(config, null, 2)}`);
+    let toolList = Object.keys(tools).join(", ");
+    log.info(`Available tools: ${toolList}`);
   }
 
   let res = await tryCatch(
