@@ -2,10 +2,13 @@ import { spawn } from "node:child_process";
 import { z } from "zod";
 import { tool } from "ai";
 import { isCancel, log, select, text } from "@clack/prompts";
+import { maybeAutoMode } from "./_shared.js";
 
 export function createExecCommandTool(options: {
   cwd: string;
   alwaysAllow: Array<string>;
+  auto: boolean;
+  autoTimeout: number;
 }) {
   return tool({
     description: `
@@ -35,10 +38,20 @@ Examples:
 
       log.info(
         `exec-command: the model wants to run:
-\t$ ${command} ${args.join(" ")}
+	$ ${command} ${args.join(" ")}
 
 Explanation: ${explanation}`,
       );
+
+      if (
+        await maybeAutoMode({
+          auto: options.auto,
+          autoTimeout: options.autoTimeout,
+        })
+      ) {
+        return await runCommand(command, args, options.cwd, timeout);
+      }
+
       let userChoice = await select({
         message: `Allow running this command?`,
         options: [

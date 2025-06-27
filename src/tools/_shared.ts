@@ -4,6 +4,66 @@ import { stat, readFile } from "node:fs/promises";
 import { glob } from "glob";
 
 import { tryCatch } from "../utils/index.js";
+import { spinner } from "@clack/prompts";
+import { setTimeout } from "node:timers/promises";
+
+export async function maybeAutoMode(options: {
+  auto: boolean;
+  autoTimeout: number;
+}) {
+  if (!options.auto) return false;
+
+  let abortController = new AbortController();
+  let shouldProceed = false;
+
+  let keypressListener = (data: Buffer) => {
+    let key = data.toString();
+    // ESC key (ASCII 27 or \x1b)
+    if (key === "\x1b") {
+      abortController.abort();
+    }
+    // Enter key (ASCII 13 or \r, or \n)
+    else if (key === "\r" || key === "\n") {
+      shouldProceed = true;
+      abortController.abort();
+    }
+    // Ignore all other keys
+  };
+
+  process.stdin.setRawMode(true);
+  process.stdin.resume();
+  process.stdin.on("data", keypressListener);
+
+  let s = spinner();
+  try {
+    s.start(
+      "auto: waiting for cancellation... (press ESC to cancel, ENTER to proceed)",
+    );
+    for (let i = options.autoTimeout; i > 0; i--) {
+      s.message(
+        `auto: waiting ${i}s for cancellation... (press ESC to cancel, ENTER to proceed)`,
+      );
+      await setTimeout(1000, undefined, {
+        signal: abortController.signal,
+      });
+    }
+    s.stop("auto-mode: proceeding");
+    return true;
+  } catch (e) {
+    // aborted
+    if (shouldProceed) {
+      s.stop("auto-mode: proceeding");
+      return true;
+    } else {
+      s.stop("auto-mode: cancelled by user");
+      return false;
+    }
+  } finally {
+    process.stdin.off("data", keypressListener);
+    process.stdin.pause();
+    process.stdin.setRawMode(false);
+  }
+}
 
 export function ensureProjectPath(projectRoot: string, rel: string): string {
   let abs = isAbsolute(rel) ? rel : resolve(projectRoot, rel);
@@ -90,32 +150,24 @@ export function trackFileAccess(absolutePath: string, mtime: number): void {
   });
 }
 
-export async function checkFileVersions(filePaths: string[]): Promise<{
-  outdatedFiles: string[];
+export async function checkFileVersion(path: string): Promise<{
+  isOutdated: boolean;
 }> {
-  let outdatedFiles: string[] = [];
-
-  for (let filePath of filePaths) {
-    let accessInfo = fileAccessTracker.get(filePath);
-    if (!accessInfo) {
-      // File was never read by the model, consider it outdated
-      outdatedFiles.push(filePath);
-      continue;
-    }
-
-    let statRes = await tryCatch(stat(filePath));
-    if (!statRes.ok) {
-      // File doesn't exist anymore, skip version check
-      continue;
-    }
-
-    if (statRes.data.mtimeMs > accessInfo.lastKnownMtime) {
-      // File was modified since last read
-      outdatedFiles.push(filePath);
-    }
+  let accessInfo = fileAccessTracker.get(path);
+  if (!accessInfo) {
+    // File was never read by the model, consider it outdated
+    return { isOutdated: true };
   }
 
-  return {
-    outdatedFiles,
-  };
+  let statRes = await tryCatch(stat(path));
+  if (!statRes.ok) {
+    // File doesn't exist anymore, skip version check
+    return { isOutdated: false };
+  }
+
+  if (statRes.data.mtimeMs > accessInfo.lastKnownMtime) {
+    // File was modified since last read
+    return { isOutdated: true };
+  }
+  return { isOutdated: false };
 }

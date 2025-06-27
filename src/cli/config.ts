@@ -12,6 +12,8 @@ let configSchema = z.object({
   system: z.string().optional(),
   editor: z.string().optional(),
   compression: z.boolean().optional(),
+  auto: z.boolean().optional(),
+  "auto-timeout": z.number().optional(),
 });
 
 export type MarkdownAIConfig = z.output<typeof configSchema>;

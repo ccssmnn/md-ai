@@ -70,6 +70,8 @@ Options:
 - `-c, --cwd <path>` Working directory for file tools.
 - `--no-tools` Disable all tools (pure chat mode).
 - `--no-compression` Disable compression for tool call/result fences.
+- `--auto` Enable auto-mode for tools.
+- `--auto-timeout <seconds>` Timeout in seconds for auto-mode (default: 5).
 
 ### Editor
 

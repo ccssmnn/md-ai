@@ -5,7 +5,7 @@ import type { CoreMessage } from "ai";
 
 import { markdownToMessages } from "../markdown/parse.js";
 import { messagesToMarkdown } from "../markdown/serialize.js";
-import { isCancel, log, select, spinner, stream, text } from "@clack/prompts";
+import { isCancel, log, select, stream, text } from "@clack/prompts";
 import { openInEditor } from "./editor.js";
 
 /** Options for configuring a markdown-backed ai session */
@@ -130,32 +130,13 @@ async function performAITurn(
     messages: msgs,
   };
 
-  // show spinner while waiting for model to start streaming
-  let spin = spinner();
-  spin.start("Waiting for response...");
-  let { textStream, response } = streamText({
+  log.info("Calling model...");
+  const { textStream, response } = streamText({
     ...requestOptions,
     onError: ({ error }) => log.error(`⚠️ streamText error: ${error}`),
   });
 
-  // stop spinner on first token and forward all chunks
-  let interceptedStream = (async function* () {
-    let first = true;
-    for await (let chunk of textStream) {
-      if (first) {
-        spin.stop();
-        first = false;
-      }
-      yield chunk;
-    }
-  })();
-
-  // ensure spinner is stopped even if no tokens were streamed
-  try {
-    await stream.message(interceptedStream);
-  } finally {
-    spin.stop();
-  }
+  await stream.message(textStream);
 
   let responseMessages = (await response).messages;
 

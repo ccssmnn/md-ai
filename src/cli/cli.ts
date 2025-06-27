@@ -16,7 +16,7 @@ import { tryCatch } from "../utils/index.js";
 
 import { createReadFilesTool } from "../tools/read-files.js";
 import { createListFilesTool } from "../tools/list-files.js";
-import { createWriteFilesTool } from "../tools/write-files.js";
+import { createWriteFileTool } from "../tools/write-file.js";
 import { createGrepSearchTool } from "../tools/grep-search.js";
 import { createExecCommandTool } from "../tools/exec-command.js";
 import { createFetchUrlContentTool } from "../tools/fetch-url-content.js";
@@ -68,6 +68,8 @@ function parseCLIArguments() {
       "--no-compression",
       "Disable compression for tool call/result fences",
     )
+    .option("--auto", "Enable auto-mode for tools")
+    .option("--auto-timeout <seconds>", "Timeout in seconds for auto-mode", "5")
     .parse(process.argv);
 
   let chatPath = program.args[0];
@@ -84,7 +86,10 @@ function mergeConfigs(opts: any, loadedConfig: MarkdownAIConfig) {
     opts.editor || loadedConfig.editor || process.env.EDITOR || "vi +99999";
   let compression =
     opts.compression === true ? !loadedConfig.compression : opts.compression;
-  return { system, model, editor, compression };
+  let auto = opts.auto ?? loadedConfig.auto ?? false;
+  let autoTimeout =
+    parseInt(opts.autoTimeout, 10) || loadedConfig["auto-timeout"] || 5;
+  return { system, model, editor, compression, auto, autoTimeout };
 }
 
 async function prepareOptions(
@@ -97,7 +102,13 @@ async function prepareOptions(
   let system = await loadSystemPrompt(config.system);
   let model = getModel(config.model);
   let cwd = resolve(opts.cwd);
-  let tools = opts.tools ? createTools(cwd) : undefined;
+  let tools = opts.tools
+    ? createTools({
+        cwd,
+        auto: config.auto,
+        autoTimeout: config.autoTimeout,
+      })
+    : undefined;
 
   return {
     chatPath,
@@ -137,13 +148,17 @@ function getModel(modelName: string) {
   return modelRes.data;
 }
 
-function createTools(cwd: string) {
+function createTools(options: {
+  cwd: string;
+  auto: boolean;
+  autoTimeout: number;
+}) {
   return {
-    listFiles: createListFilesTool({ cwd }),
-    readFiles: createReadFilesTool({ cwd }),
-    writeFiles: createWriteFilesTool({ cwd }),
-    grepSearch: createGrepSearchTool({ cwd }),
-    execCommand: createExecCommandTool({ cwd, alwaysAllow: [] }),
+    listFiles: createListFilesTool({ cwd: options.cwd }),
+    readFiles: createReadFilesTool({ cwd: options.cwd }),
+    writeFiles: createWriteFileTool(options),
+    grepSearch: createGrepSearchTool({ cwd: options.cwd }),
+    execCommand: createExecCommandTool({ ...options, alwaysAllow: [] }),
     fetchUrlContent: createFetchUrlContentTool(),
   };
 }
@@ -168,6 +183,12 @@ async function startMarkdownAI({
 
   // Print the selected model info
   log.info(`Using model: ${config.model}`);
+
+  if (config.auto) {
+    log.warn(
+      `Auto-mode is enabled. The AI will be able to execute commands without your approval.`,
+    );
+  }
 
   let res = await tryCatch(
     runMarkdownAI({

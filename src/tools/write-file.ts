@@ -10,17 +10,21 @@ import { dirname } from "node:path";
 
 import { z } from "zod";
 import { tool } from "ai";
-import { isCancel, log, multiselect, select, text } from "@clack/prompts";
-import type { MultiSelectOptions } from "@clack/prompts";
+import { isCancel, log, select, text } from "@clack/prompts";
 
-import { ensureProjectPath, checkFileVersions } from "./_shared.js";
+import { ensureProjectPath, checkFileVersion } from "./_shared.js";
 import { shouldNeverHappen, tryCatch } from "../utils/index.js";
+import { maybeAutoMode } from "./_shared.js";
 
-export function createWriteFilesTool(options: { cwd: string }) {
+export function createWriteFileTool(options: {
+  cwd: string;
+  auto: boolean;
+  autoTimeout: number;
+}) {
   return tool({
-    description: `Applies a series of file modifications based on a JSON array of patch objects.
+    description: `Applies a single file modification based on a JSON patch object.
 
-The input should be a JSON array where each element is an object representing a file operation. The possible operations are:
+The input should be a JSON object representing a file operation. The possible operations are:
 
 1. Add File:
    {
@@ -64,7 +68,7 @@ The input should be a JSON array where each element is an object representing a 
    Replaces the entire content of an existing file. Fails if the file does not exist.
    Note: For large file modifications, using the 'replace' type is generally more efficient and reliable than using multiple or a single large 'update' patch.
 
-The tool will present the proposed changes to the user for confirmation before applying them.
+The tool will present the proposed change to the user for confirmation before applying it.
 
 IMPORTANT: After successfully applying file changes, you should inspect the codebase to determine what formatting, linting, and compilation checks are appropriate, then run them:
 
@@ -90,86 +94,58 @@ IMPORTANT: After successfully applying file changes, you should inspect the code
 Use the execCommand tool to run these checks. Always prefer using existing project scripts (e.g., "npm run lint") over direct tool invocation when available.
 `,
     parameters: writeFilesParameters,
-    execute: async ({ patches }) => {
+    execute: async ({ patch }) => {
       log.step("write files: the model wants to make the changes");
-      log.info(patchesToDiffString(patches));
+      log.info(patchToDiffString(patch));
 
-      let filesToModify = patches
-        .filter((p) => p.type === "update" || p.type === "replace")
-        .map((p) => ensureProjectPath(options.cwd, p.path));
+      let fileToModify =
+        patch.type === "update" || patch.type === "replace"
+          ? ensureProjectPath(options.cwd, patch.path)
+          : undefined;
 
-      if (filesToModify.length > 0) {
-        let { outdatedFiles } = await checkFileVersions(filesToModify);
-        outdatedFiles = outdatedFiles.map((f) =>
-          f.replace(options.cwd + "/", ""),
-        );
-        if (outdatedFiles.length !== 0) {
+      if (fileToModify) {
+        let { isOutdated } = await checkFileVersion(fileToModify);
+        if (isOutdated) {
           log.warning(
-            `write files: detected outdated file versions. the model needs to re-read these files before making changes:
-${outdatedFiles.map((f) => `  - ${f}`).join("\n")}`,
+            `write files: file outdated. the model needs to re-read the file before making changes: ${fileToModify}`,
           );
-
           return {
             ok: false,
-            status: "files-outdated",
-            reason: `The following files have been modified since you last read them: ${outdatedFiles.join(", ")}. Please re-read these files before attempting to modify them.`,
-            outdatedFiles,
+            status: "file-outdated",
+            reason: `The file you want to modify is outdated. Re-read it before applying changes.`,
           };
         }
       }
 
-      let patchesToAllow = await askWhichPatchesToAllow(patches);
-      if (patchesToAllow.type === "none") {
+      let patchToAllow: { type: "allow" } | { type: "deny"; reason?: string };
+
+      if (
+        await maybeAutoMode({
+          auto: options.auto,
+          autoTimeout: options.autoTimeout,
+        })
+      ) {
+        patchToAllow = { type: "allow" } as const;
+      } else {
+        patchToAllow = await askWhichPatchToAllow(patch);
+      }
+
+      if (patchToAllow.type === "deny") {
         return {
           ok: false,
           status: "user-denied",
           reason:
-            patchesToAllow.reason ||
-            "the user did not allow any of the patches. ask them why.",
+            patchToAllow.reason ||
+            "the user did not allow the patch. ask them why.",
         };
       }
 
       let { cwd } = options;
-      let results = await Promise.all(
-        patches.map((patch, i) => {
-          if (
-            patchesToAllow.type === "some" &&
-            !patchesToAllow.allowedPatchIDs.includes(i)
-          ) {
-            return {
-              ok: false,
-              path: patch.path,
-              status: "user-denied",
-              reason:
-                patchesToAllow.type === "some" && patchesToAllow.reason
-                  ? patchesToAllow.reason
-                  : "user decided to not allow this patch. ask them why.",
-            };
-          }
-          switch (patch.type) {
-            case "add":
-              return applyAddPatch(patch, cwd);
-            case "delete":
-              return applyDeletePatch(patch, cwd);
-            case "move":
-              return applyMovePatch(patch, cwd);
-            case "update":
-              return applyUpdatePatch(patch, cwd);
-            case "replace":
-              return applyReplacePatch(patch, cwd);
-            default:
-              patch satisfies never;
-              shouldNeverHappen(
-                `unexpected patch type ${JSON.stringify(patch)}`,
-              );
-          }
-        }),
-      );
 
-      let ok = results.every((r) => r.ok);
-      let summary = results.map((r) => `${r.path}:${r.status}`).join(", ");
-      log.step(`write files: ${summary}`);
-      return { ok, results };
+      const result = await applyPatch(patch, cwd);
+
+      log.step(`write file: ${result.path}:${result.status}`);
+      return { ok: result.ok, result };
     },
   });
 }
@@ -205,105 +181,94 @@ let filePatchSchema = z.union([
 type FilePatch = z.infer<typeof filePatchSchema>;
 
 let writeFilesParameters = z.object({
-  patches: z.array(filePatchSchema),
+  patch: filePatchSchema,
 });
 
-function patchesToDiffString(patches: Array<FilePatch>) {
-  return patches
-    .map((p) => {
-      switch (p.type) {
-        case "add":
-          return [`*** Add File: ${p.path}`, "<<< ADD", p.content, ">>>"].join(
-            "\n",
-          );
-        case "delete":
-          return `*** Delete File: ${p.path}`;
-        case "move":
-          return [`*** Move File: ${p.path}`, "<<< TO", p.to, ">>>"].join("\n");
-        case "update":
-          return [
-            `*** Update File: ${p.path}`,
-            "<<< SEARCH",
-            p.search,
-            "===",
-            p.replace,
-            ">>>",
-          ].join("\n");
-        case "replace":
-          return [
-            `*** Replace File: ${p.path}`,
-            "<<< REPLACE WITH",
-            p.content,
-            ">>>",
-          ].join("\n");
-        default:
-          p satisfies never;
-      }
-    })
-    .join("\n");
+function patchToDiffString(patch: FilePatch): string {
+  if (patch.type === "add") {
+    return [
+      `*** Add File: ${patch.path}`,
+      "<<< ADD",
+      patch.content,
+      ">>>",
+    ].join("\n");
+  }
+  if (patch.type === "delete") {
+    return `*** Delete File: ${patch.path}`;
+  }
+  if (patch.type === "move") {
+    return [`*** Move File: ${patch.path}`, "<<< TO", patch.to, ">>>"].join(
+      "\n",
+    );
+  }
+  if (patch.type === "update") {
+    return [
+      `*** Update File: ${patch.path}`,
+      "<<< SEARCH",
+      patch.search,
+      "===",
+      patch.replace,
+      ">>>",
+    ].join("\n");
+  }
+  if (patch.type === "replace") {
+    return [
+      `*** Replace File: ${patch.path}`,
+      "<<< REPLACE WITH",
+      patch.content,
+      ">>>",
+    ].join("\n");
+  }
+
+  patch satisfies never;
+  return shouldNeverHappen(`unexpected patch type ${JSON.stringify(patch)}`);
 }
 
-async function askWhichPatchesToAllow(patches: Array<FilePatch>) {
-  let firstResponse = await select({
-    message: "Choose which patches to apply",
+async function askWhichPatchToAllow(
+  patch: FilePatch,
+): Promise<{ type: "allow" } | { type: "deny"; reason?: string }> {
+  let patchLabel: string;
+  switch (patch.type) {
+    case "delete":
+      patchLabel = `DELETE ${patch.path}`;
+      break;
+    case "add":
+      patchLabel = `ADD ${patch.path}`;
+      break;
+    case "update":
+      patchLabel = `UPDATE ${patch.path}`;
+      break;
+    case "move":
+      patchLabel = `MOVE ${patch.path} to ${patch.to}`;
+      break;
+    case "replace":
+      patchLabel = `REPLACE ${patch.path}`;
+      break;
+    default:
+      patch satisfies never;
+      shouldNeverHappen(`unexpected patch type ${JSON.stringify(patch)}`);
+  }
+
+  let response = await select({
+    message: `Apply this patch: ${patchLabel}?`,
     options: [
-      { value: "all", label: "All" },
-      { value: "none", label: "None" },
-      { value: "some", label: "Some" },
+      { value: "allow", label: "Yes" },
+      { value: "deny", label: "No" },
     ],
   });
 
-  if (isCancel(firstResponse)) throw Error("user has canceled");
+  if (isCancel(response)) throw Error("user has canceled");
 
-  if (firstResponse === "none") {
+  if (response === "deny") {
     let reason = await text({
-      message: "Why are you denying all patches? (optional)",
+      message: "Why are you denying this patch? (optional)",
       placeholder: "Enter reason or press Enter to skip",
     });
     if (isCancel(reason)) throw Error("user has canceled");
-    return { type: "none" as const, reason: reason || undefined };
-  }
-  if (firstResponse === "all") {
-    return { type: "all" as const };
+    return { type: "deny" as const, reason: reason || undefined };
   }
 
-  let patchOptions = patches.map(
-    (patch, i): MultiSelectOptions<number>["options"][number] => {
-      switch (patch.type) {
-        case "delete":
-          return { value: i, label: `DELETE ${patch.path}` };
-        case "add":
-          return { value: i, label: `ADD ${patch.path}` };
-        case "update":
-          return { value: i, label: `UPDATE ${patch.path}` };
-        case "move":
-          return { value: i, label: `MOVE ${patch.path} to ${patch.to}` };
-        case "replace":
-          return { value: i, label: `REPLACE ${patch.path}` };
-        default:
-          patch satisfies never;
-          shouldNeverHappen(`unexpected patch type ${JSON.stringify(patch)}`);
-      }
-    },
-  );
-  let response = await multiselect<number>({
-    message: "Choose which patches to apply",
-    options: patchOptions,
-  });
-  if (isCancel(response)) throw Error("user has canceled");
-
-  let deniedPatchCount = patches.length - response.length;
-  let reason: string | undefined;
-  if (deniedPatchCount > 0) {
-    let reasonResponse = await text({
-      message: `Why are you denying ${deniedPatchCount} patch${deniedPatchCount > 1 ? "es" : ""}? (optional)`,
-      placeholder: "Enter reason or press Enter to skip",
-    });
-    if (isCancel(reasonResponse)) throw Error("user has canceled");
-    reason = reasonResponse || undefined;
-  }
-
-  return { type: "some" as const, allowedPatchIDs: response, reason };
+  return { type: "allow" as const };
 }
 
 type PatchResult = {
@@ -312,6 +277,24 @@ type PatchResult = {
   status: string;
   reason?: string;
 };
+
+async function applyPatch(patch: FilePatch, cwd: string) {
+  switch (patch.type) {
+    case "add":
+      return await applyAddPatch(patch, cwd);
+    case "delete":
+      return await applyDeletePatch(patch, cwd);
+    case "move":
+      return await applyMovePatch(patch, cwd);
+    case "update":
+      return await applyUpdatePatch(patch, cwd);
+    case "replace":
+      return await applyReplacePatch(patch, cwd);
+    default:
+      patch satisfies never;
+      shouldNeverHappen(`unexpected patch type ${JSON.stringify(patch)}`);
+  }
+}
 
 async function applyAddPatch(
   patch: Extract<FilePatch, { type: "add" }>,
