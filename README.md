@@ -69,8 +69,9 @@ Options:
 - `-e, --editor <cmd>` Editor command (default: $EDITOR or 'vi +99999').
 - `-c, --cwd <path>` Working directory for file tools.
 - `--no-tools` Disable all tools (pure chat mode).
-- `--no-compression` Disable compression for tool call/result fences.
-
+ - `--no-compression` Disable compression for tool call/result fences.
+ - `--auto` Enable auto-mode for tools.
+ - `--auto-timeout <seconds>` Timeout in seconds for auto-mode (default: 5).
 ### Editor
 
 #### VS Code

@@ -4,6 +4,45 @@ import { stat, readFile } from "node:fs/promises";
 import { glob } from "glob";
 
 import { tryCatch } from "../utils/index.js";
+import { log } from "@clack/prompts";
+import { setTimeout } from "node:timers/promises";
+
+export async function maybeAutoMode(options: {
+  auto: boolean;
+  autoTimeout: number;
+}) {
+  if (!options.auto) return false;
+
+  const abortController = new AbortController();
+
+  const keypressListener = () => {
+    abortController.abort();
+  };
+
+  process.stdin.setRawMode(true);
+  process.stdin.resume();
+  process.stdin.on("data", keypressListener);
+
+  try {
+    for (let i = options.autoTimeout; i > 0; i--) {
+      log.info(
+        `auto: waiting ${i}s for cancellation... (press any key to cancel)`,
+      );
+      await setTimeout(1000, undefined, {
+        signal: abortController.signal,
+      });
+    }
+    return true;
+  } catch (e) {
+    // aborted
+    log.info("auto-mode: cancelled by user");
+    return false;
+  } finally {
+    process.stdin.off("data", keypressListener);
+    process.stdin.pause();
+    process.stdin.setRawMode(false);
+  }
+}
 
 export function ensureProjectPath(projectRoot: string, rel: string): string {
   let abs = isAbsolute(rel) ? rel : resolve(projectRoot, rel);
@@ -119,3 +158,4 @@ export async function checkFileVersions(filePaths: string[]): Promise<{
     outdatedFiles,
   };
 }
+

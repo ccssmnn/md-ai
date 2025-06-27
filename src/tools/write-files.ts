@@ -15,8 +15,13 @@ import type { MultiSelectOptions } from "@clack/prompts";
 
 import { ensureProjectPath, checkFileVersions } from "./_shared.js";
 import { shouldNeverHappen, tryCatch } from "../utils/index.js";
+import { maybeAutoMode } from "./_shared.js";
 
-export function createWriteFilesTool(options: { cwd: string }) {
+export function createWriteFilesTool(options: {
+  cwd: string;
+  auto: boolean;
+  autoTimeout: number;
+}) {
   return tool({
     description: `Applies a series of file modifications based on a JSON array of patch objects.
 
@@ -118,7 +123,21 @@ ${outdatedFiles.map((f) => `  - ${f}`).join("\n")}`,
         }
       }
 
-      let patchesToAllow = await askWhichPatchesToAllow(patches);
+      let patchesToAllow:
+        | { type: "all" }
+        | { type: "none"; reason?: string }
+        | {
+            type: "some";
+            allowedPatchIDs: number[];
+            reason?: string;
+          };
+
+      if (await maybeAutoMode({ auto: options.auto, autoTimeout: options.autoTimeout })) {
+        patchesToAllow = { type: "all" };
+      } else {
+        patchesToAllow = await askWhichPatchesToAllow(patches);
+      }
+
       if (patchesToAllow.type === "none") {
         return {
           ok: false,
