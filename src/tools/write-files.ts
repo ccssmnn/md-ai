@@ -81,6 +81,11 @@ The tool will present the proposed changes to the user for confirmation before a
           f.replace(options.cwd + "/", ""),
         );
         if (outdatedFiles.length !== 0) {
+          log.warning(
+            `write files: detected outdated file versions. the model needs to re-read these files before making changes:
+${outdatedFiles.map((f) => `  - ${f}`).join("\n")}`,
+          );
+
           return {
             ok: false,
             status: "files-outdated",
