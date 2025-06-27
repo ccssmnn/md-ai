@@ -9,7 +9,7 @@ import { google } from "@ai-sdk/google";
 import { openai } from "@ai-sdk/openai";
 import { anthropic } from "@ai-sdk/anthropic";
 import { intro, log, outro } from "@clack/prompts";
-import { createProviderRegistry, type ToolSet } from "ai";
+import { createProviderRegistry, type LanguageModelV1, type ToolSet } from "ai";
 
 import { runMarkdownAI } from "../chat/chat.js";
 import { tryCatch } from "../utils/index.js";
@@ -158,13 +158,16 @@ async function startMarkdownAI({
   chatPath: string;
   config: ReturnType<typeof mergeConfigs>;
   system: string | undefined;
-  model: any;
+  model: LanguageModelV1;
   tools: ToolSet | undefined;
 }) {
   if (tools) {
     let toolList = Object.keys(tools).join(", ");
     log.info(`Available tools: ${toolList}`);
   }
+
+  // Print the selected model info
+  log.info(`Using model: ${config.model}`);
 
   let res = await tryCatch(
     runMarkdownAI({
