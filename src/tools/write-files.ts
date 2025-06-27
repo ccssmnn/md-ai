@@ -10,10 +10,10 @@ import { dirname } from "node:path";
 
 import { z } from "zod";
 import { tool } from "ai";
-import { isCancel, log, multiselect, select } from "@clack/prompts";
+import { isCancel, log, multiselect, select, text } from "@clack/prompts";
 import type { MultiSelectOptions } from "@clack/prompts";
 
-import { ensureProjectPath } from "./_shared.js";
+import { ensureProjectPath, checkFileVersions } from "./_shared.js";
 import { shouldNeverHappen, tryCatch } from "../utils/index.js";
 
 export function createWriteFilesTool(options: { cwd: string }) {
@@ -65,18 +65,67 @@ The input should be a JSON array where each element is an object representing a 
    Note: For large file modifications, using the 'replace' type is generally more efficient and reliable than using multiple or a single large 'update' patch.
 
 The tool will present the proposed changes to the user for confirmation before applying them.
+
+IMPORTANT: After successfully applying file changes, you should inspect the codebase to determine what formatting, linting, and compilation checks are appropriate, then run them:
+
+1. **Inspect the project structure** to identify the technology stack:
+   - Look for package.json (Node.js/JavaScript/TypeScript)
+   - Look for Cargo.toml (Rust)
+   - Look for go.mod (Go)
+   - Look for pyproject.toml, setup.py, requirements.txt (Python)
+   - Look for Makefile, composer.json, etc.
+
+2. **Check for existing scripts and tools**:
+   - In package.json: look for "scripts" section (format, lint, type-check, test, etc.)
+   - In Makefile: look for formatting/linting targets
+   - In pyproject.toml: look for tool configurations (black, ruff, mypy, etc.)
+   - Look for configuration files (.eslintrc, .prettierrc, tox.ini, etc.)
+
+3. **Run appropriate checks based on what you find**:
+   - **Formatting**: prettier, black, cargo fmt, go fmt, etc.
+   - **Linting**: eslint, ruff, cargo clippy, golangci-lint, flake8, etc.
+   - **Type checking**: tsc, mypy, cargo check, go build, etc.
+   - **Testing**: npm test, cargo test, go test, pytest, etc.
+
+Use the execCommand tool to run these checks. Always prefer using existing project scripts (e.g., "npm run lint") over direct tool invocation when available.
 `,
     parameters: writeFilesParameters,
     execute: async ({ patches }) => {
       log.step("write files: the model wants to make the changes");
       log.info(patchesToDiffString(patches));
 
+      let filesToModify = patches
+        .filter((p) => p.type === "update" || p.type === "replace")
+        .map((p) => ensureProjectPath(options.cwd, p.path));
+
+      if (filesToModify.length > 0) {
+        let { outdatedFiles } = await checkFileVersions(filesToModify);
+        outdatedFiles = outdatedFiles.map((f) =>
+          f.replace(options.cwd + "/", ""),
+        );
+        if (outdatedFiles.length !== 0) {
+          log.warning(
+            `write files: detected outdated file versions. the model needs to re-read these files before making changes:
+${outdatedFiles.map((f) => `  - ${f}`).join("\n")}`,
+          );
+
+          return {
+            ok: false,
+            status: "files-outdated",
+            reason: `The following files have been modified since you last read them: ${outdatedFiles.join(", ")}. Please re-read these files before attempting to modify them.`,
+            outdatedFiles,
+          };
+        }
+      }
+
       let patchesToAllow = await askWhichPatchesToAllow(patches);
       if (patchesToAllow.type === "none") {
         return {
           ok: false,
           status: "user-denied",
-          reason: "the user did not allow any of the patches. ask them why.",
+          reason:
+            patchesToAllow.reason ||
+            "the user did not allow any of the patches. ask them why.",
         };
       }
 
@@ -91,7 +140,10 @@ The tool will present the proposed changes to the user for confirmation before a
               ok: false,
               path: patch.path,
               status: "user-denied",
-              reason: "user decided to not allow this patch. ask them why.",
+              reason:
+                patchesToAllow.type === "some" && patchesToAllow.reason
+                  ? patchesToAllow.reason
+                  : "user decided to not allow this patch. ask them why.",
             };
           }
           switch (patch.type) {
@@ -204,7 +256,12 @@ async function askWhichPatchesToAllow(patches: Array<FilePatch>) {
   if (isCancel(firstResponse)) throw Error("user has canceled");
 
   if (firstResponse === "none") {
-    return { type: "none" as const };
+    let reason = await text({
+      message: "Why are you denying all patches? (optional)",
+      placeholder: "Enter reason or press Enter to skip",
+    });
+    if (isCancel(reason)) throw Error("user has canceled");
+    return { type: "none" as const, reason: reason || undefined };
   }
   if (firstResponse === "all") {
     return { type: "all" as const };
@@ -234,7 +291,19 @@ async function askWhichPatchesToAllow(patches: Array<FilePatch>) {
     options: patchOptions,
   });
   if (isCancel(response)) throw Error("user has canceled");
-  return { type: "some" as const, allowedPatchIDs: response };
+
+  let deniedPatchCount = patches.length - response.length;
+  let reason: string | undefined;
+  if (deniedPatchCount > 0) {
+    let reasonResponse = await text({
+      message: `Why are you denying ${deniedPatchCount} patch${deniedPatchCount > 1 ? "es" : ""}? (optional)`,
+      placeholder: "Enter reason or press Enter to skip",
+    });
+    if (isCancel(reasonResponse)) throw Error("user has canceled");
+    reason = reasonResponse || undefined;
+  }
+
+  return { type: "some" as const, allowedPatchIDs: response, reason };
 }
 
 type PatchResult = {

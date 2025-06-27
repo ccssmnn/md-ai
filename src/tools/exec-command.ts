@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
 import { z } from "zod";
 import { tool } from "ai";
-import { log, select } from "@clack/prompts";
+import { isCancel, log, select, text } from "@clack/prompts";
 
 export function createExecCommandTool(options: {
   cwd: string;
@@ -51,10 +51,17 @@ Explanation: ${explanation}`,
         ],
       });
       if (userChoice === "deny") {
+        let reason = await text({
+          message: "Why are you denying this command? (optional)",
+          placeholder: "Enter reason or press Enter to skip",
+        });
+        if (isCancel(reason)) throw Error("user has canceled");
+
         return {
           ok: false,
           status: "user-denied",
-          reason: "the user denied running this command. ask them why.",
+          reason:
+            reason || "the user denied running this command. ask them why.",
         };
       }
       if (userChoice === "always") {

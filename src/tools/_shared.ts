@@ -74,3 +74,48 @@ export function parseGitignore(content: string): Array<string> {
       return [isNeg ? `!${filePattern}` : filePattern];
     });
 }
+
+let fileAccessTracker = new Map<
+  string,
+  {
+    lastReadTime: number;
+    lastKnownMtime: number;
+  }
+>();
+
+export function trackFileAccess(absolutePath: string, mtime: number): void {
+  fileAccessTracker.set(absolutePath, {
+    lastReadTime: Date.now(),
+    lastKnownMtime: mtime,
+  });
+}
+
+export async function checkFileVersions(filePaths: string[]): Promise<{
+  outdatedFiles: string[];
+}> {
+  let outdatedFiles: string[] = [];
+
+  for (let filePath of filePaths) {
+    let accessInfo = fileAccessTracker.get(filePath);
+    if (!accessInfo) {
+      // File was never read by the model, consider it outdated
+      outdatedFiles.push(filePath);
+      continue;
+    }
+
+    let statRes = await tryCatch(stat(filePath));
+    if (!statRes.ok) {
+      // File doesn't exist anymore, skip version check
+      continue;
+    }
+
+    if (statRes.data.mtimeMs > accessInfo.lastKnownMtime) {
+      // File was modified since last read
+      outdatedFiles.push(filePath);
+    }
+  }
+
+  return {
+    outdatedFiles,
+  };
+}

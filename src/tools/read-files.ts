@@ -1,11 +1,11 @@
-import { readFile } from "node:fs/promises";
+import { readFile, stat } from "node:fs/promises";
 
 import { z } from "zod";
 import { tool } from "ai";
 import { log } from "@clack/prompts";
 
 import { tryCatch } from "../utils/index.js";
-import { ensureProjectPath, globFiles } from "./_shared.js";
+import { ensureProjectPath, globFiles, trackFileAccess } from "./_shared.js";
 
 export function createReadFilesTool(options: { cwd: string }) {
   let { cwd } = options;
@@ -24,6 +24,11 @@ export function createReadFilesTool(options: { cwd: string }) {
         files.map(async (rel) => {
           let abs = ensureProjectPath(cwd, rel);
           let res = await tryCatch(readFile(abs, "utf-8"));
+          let statRes = await tryCatch(stat(abs));
+          if (res.ok && statRes.ok) {
+            trackFileAccess(abs, statRes.data.mtimeMs);
+          }
+
           return {
             path: rel,
             ok: res.ok,
