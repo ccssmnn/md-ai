@@ -7,6 +7,7 @@ import { tryCatch } from "../utils/index.js";
 import { spinner } from "@clack/prompts";
 import { setTimeout } from "node:timers/promises";
 
+// AI: using space for cancel, enter to proceed
 export async function maybeAutoMode(options: {
   auto: boolean;
   autoTimeout: number;
@@ -18,8 +19,8 @@ export async function maybeAutoMode(options: {
 
   let keypressListener = (data: Buffer) => {
     let key = data.toString();
-    // ESC key (ASCII 27 or \x1b)
-    if (key === "\x1b") {
+    // Space key (ASCII 32)
+    if (key === " ") {
       abortController.abort();
     }
     // Enter key (ASCII 13 or \r, or \n)
@@ -37,11 +38,11 @@ export async function maybeAutoMode(options: {
   let s = spinner();
   try {
     s.start(
-      "auto: waiting for cancellation... (press ESC to cancel, ENTER to proceed)",
+      "auto: waiting for cancellation... (press SPACE to cancel, ENTER to proceed)",
     );
     for (let i = options.autoTimeout; i > 0; i--) {
       s.message(
-        `auto: waiting ${i}s for cancellation... (press ESC to cancel, ENTER to proceed)`,
+        `auto: waiting ${i}s for cancellation... (press SPACE to cancel, ENTER to proceed)`,
       );
       await setTimeout(1000, undefined, {
         signal: abortController.signal,
