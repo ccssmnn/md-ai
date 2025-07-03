@@ -12,7 +12,11 @@ import { z } from "zod";
 import { tool } from "ai";
 import { isCancel, log, select, text } from "@clack/prompts";
 
-import { ensureProjectPath, checkFileVersion } from "./_shared.js";
+import {
+  ensureProjectPath,
+  checkFileVersion,
+  trackFileAccess,
+} from "./_shared.js";
 import { shouldNeverHappen, tryCatch } from "../utils/index.js";
 import { maybeAutoMode } from "./_shared.js";
 
@@ -143,6 +147,17 @@ Use the execCommand tool to run these checks. Always prefer using existing proje
       let { cwd } = options;
 
       const result = await applyPatch(patch, cwd);
+
+      if (result.ok) {
+        const modifiedFilePath = ensureProjectPath(
+          cwd,
+          patch.type === "move" ? patch.to : patch.path,
+        );
+        const statRes = await tryCatch(stat(modifiedFilePath));
+        if (statRes.ok) {
+          trackFileAccess(modifiedFilePath, statRes.data.mtimeMs);
+        }
+      }
 
       log.step(`write file: ${result.path}:${result.status}`);
       return { ok: result.ok, result };
