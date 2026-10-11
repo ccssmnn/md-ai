@@ -1,4 +1,4 @@
-import { resolve, isAbsolute } from "node:path";
+import { resolve, isAbsolute, relative } from "node:path";
 import { stat, readFile } from "node:fs/promises";
 
 import { glob } from "glob";
@@ -68,7 +68,8 @@ export async function maybeAutoMode(options: {
 
 export function ensureProjectPath(projectRoot: string, rel: string): string {
   let abs = isAbsolute(rel) ? rel : resolve(projectRoot, rel);
-  if (!abs.startsWith(projectRoot)) {
+  let relPath = relative(projectRoot, abs);
+  if (relPath.startsWith("..") || isAbsolute(relPath)) {
     throw new Error("Path outside project root");
   }
   return abs;

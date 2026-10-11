@@ -1,7 +1,8 @@
 import assert from "node:assert";
+import { resolve } from "node:path";
 import test from "node:test";
 
-import { parseGitignore } from "../../src/tools/_shared.js";
+import { ensureProjectPath, parseGitignore } from "../../src/tools/_shared.js";
 
 test("tools: _shared: parseGitignore", async (t) => {
   await t.test("should return an empty array for empty content", () => {
@@ -101,6 +102,34 @@ temp
 file.with.dots
 `;
       assert.deepStrictEqual(parseGitignore(content), ["**/file.with.dots"]);
+    },
+  );
+});
+
+test("tools: _shared: ensureProjectPath", async (t) => {
+  await t.test("should return absolute path for valid relative path", () => {
+    let root = resolve("/app/project");
+    let result = ensureProjectPath(root, "src/index.ts");
+    assert.strictEqual(result, resolve(root, "src/index.ts"));
+  });
+
+  await t.test("should throw error for path escaping root via ..", () => {
+    let root = resolve("/app/project");
+    assert.throws(
+      () => ensureProjectPath(root, "../outside.txt"),
+      /Path outside project root/,
+    );
+  });
+
+  await t.test(
+    "should throw error for sibling directory with matching prefix",
+    () => {
+      let root = resolve("/app/project");
+      let evilSibling = resolve("/app/project-evil/file.txt");
+      assert.throws(
+        () => ensureProjectPath(root, evilSibling),
+        /Path outside project root/,
+      );
     },
   );
 });

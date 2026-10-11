@@ -53,7 +53,7 @@ async function runGrepProcess(
       resolve({ stdout: "", code: -1 });
     });
     proc.on("close", (code) => {
-      if (code !== 0) {
+      if (code !== 0 && code !== 1) {
         console.error("grep failed with code", code, ":", stderr);
       }
       resolve({ stdout, code: code ?? 0 });
